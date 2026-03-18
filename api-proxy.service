@@ -1,0 +1,30 @@
+[Unit]
+Description=OpenAI API Proxy Service with WebSocket Support
+After=network.target
+
+[Service]
+Type=simple
+User=magicbear
+Group=magicbear
+WorkingDirectory=/data/clawdata/dev/proj/api-proxy
+Environment=PATH=/home/magicbear/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /data/clawdata/dev/proj/api-proxy/proxy_server.py
+Restart=always
+RestartSec=5
+
+# Standard output and error
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=api-proxy
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Network settings
+ReadWritePaths=/data/clawdata/dev/proj/api-proxy
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target

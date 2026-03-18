@@ -1,0 +1,23 @@
+[Unit]
+Description=OpenAI API Proxy Server in Screen Session
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=magicbear
+Group=magicbear
+WorkingDirectory=/data/clawdata/dev/proj/api-proxy
+
+# Start the server in a detached screen session named 'api-proxy'
+ExecStart=/usr/bin/screen -dmS api-proxy /data/clawdata/dev/proj/api-proxy/start_in_screen.sh
+
+# Stop the screen session when stopping the service
+ExecStop=/usr/bin/screen -S api-proxy -X quit
+
+# Environment settings
+Environment=PATH=/home/magicbear/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

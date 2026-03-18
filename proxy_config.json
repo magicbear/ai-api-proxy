@@ -1,0 +1,141 @@
+{
+  "endpoints": [
+    {
+      "proxy_path_prefix": "/local-vllm",
+      "target_base_url": "http://192.168.32.130:16666/",
+      "api_key_header": "",
+      "api_key_prefix": "",
+      "api_key_env": ""
+    },
+    {
+      "proxy_path_prefix": "/local-sgl",
+      "target_base_url": "http://192.168.32.5:16666/",
+      "api_key_header": "",
+      "api_key_prefix": "",
+      "api_key_env": ""
+    },
+    {
+      "proxy_path_prefix": "/xai",
+      "target_base_url": "http://192.168.32.253/grok/",
+      "api_key_header": "Authorization",
+      "api_key_prefix": "Bearer ",
+      "api_key_env": "BAILIAN_API_KEY"
+    },
+    {
+      "proxy_path_prefix": "/bailian",
+      "target_base_url": "http://192.168.32.253/bailian/",
+      "api_key_header": "",
+      "api_key_prefix": "",
+      "api_key_env": "",
+      "models": [
+        "qwen3.5-plus",
+        "qwen3-max-2026-01-23",
+        "qwen3-coder-next",
+        "qwen3-coder-plus",
+        "glm-5",
+        "glm-4.7",
+        "kimi-k2.5",
+        "MiniMax-M2.5"
+      ]
+    },
+    {
+      "proxy_path_prefix": "/aliyun",
+      "target_base_url": "http://192.168.32.253/aliyun/",
+      "api_key_header": "Authorization",
+      "api_key_prefix": "Bearer ",
+      "api_key_env": ""
+    },
+    {
+      "proxy_path_prefix": "/deepseek",
+      "target_base_url": "http://192.168.32.253/deepseek/",
+      "api_key_header": "Authorization",
+      "api_key_prefix": "Bearer ",
+      "api_key_env": ""
+    },
+    {
+      "proxy_path_prefix": "/doubao",
+      "target_base_url": "http://192.168.32.253/doubao/",
+      "api_key_header": "Authorization",
+      "api_key_prefix": "Bearer ",
+      "api_key_env": ""
+    }
+  ],
+  "port": 16900,
+  "model_display_settings": {
+    "grok-3": false,
+    "grok-3-mini": false,
+    "deepseek-r1-distill-llama-70b": false,
+    "deepseek-r1-distill-llama-8b": false,
+    "deepseek-r1-distill-qwen-1.5b": false,
+    "deepseek-r1-distill-qwen-32b": false,
+    "deepseek-r1-distill-qwen-14b": false,
+    "deepseek-r1-distill-qwen-7b": false,
+    "qwen-vl-ocr-latest": false,
+    "qwen-coder-plus": true,
+    "qwen/qwen3-32b-20250429": false,
+    "qwen/qwen3-8b-20250429": false,
+    "qwen/qwen2-5-72b-20240919": false,
+    "qwen/qwen3-0-6b-20250429": false,
+    "qwen/qwen3-14b-20250429": false,
+    "qwen/qwen-image-max-2025-12-30": false,
+    "qwen/qwen3-vl-plus-2025-12-19": false,
+    "qwen/qwen3-omni-flash-2025-12-01": false,
+    "qwen/qwen-image-edit-plus-2025-12-15": false,
+    "qwen/qwen3-tts-vd-realtime-2025-12-16": false,
+    "qwen/qwen3-omni-flash-realtime-2025-12-01": false,
+    "qwen/qwen3-livetranslate-flash-2025-12-01": false,
+    "qwen/qwen3-tts-flash-2025-11-27": false,
+    "qwen/qwen3-tts-vc-realtime-2025-11-27": false,
+    "qwen/qwen-plus-2025-12-01": false,
+    "qwen/qwen-plus-2025-11-05": false,
+    "qwen/qwen3-tts-flash-realtime-2025-11-27": false,
+    "qwen/qwen-vl-ocr-2025-11-20": false,
+    "qwen/qwen3-asr-flash-realtime-2025-10-27": false,
+    "qwen/qwen-image-edit-plus-2025-10-30": false,
+    "qwen/qwen3-tts-flash-2025-09-18": false,
+    "qwen/qwen3-tts-flash-realtime-2025-09-18": false,
+    "qwen/qwen3-omni-flash-realtime-2025-09-15": false,
+    "qwen/qwen3-s2s-flash-realtime-2025-09-22": false,
+    "qwen/qwen3-livetranslate-flash-realtime-2025-09-22": false,
+    "qwen/qwen3-omni-flash-2025-09-15": false,
+    "qwen/qwen-max-2025-01-25": false,
+    "qwen/qwen-turbo-2024-11-01": false,
+    "qwen/qwen-plus-2025-01-25": false,
+    "qwen/qwen-turbo-2025-04-28": false,
+    "qwen/qwen-plus-2025-04-28": false,
+    "qwen/qwen-vl-max-2025-04-08": false,
+    "qwen/qwen-vl-plus-2025-01-25": false,
+    "qwen/qwen-vl-plus-2025-05-07": false,
+    "qwen/qwen-turbo-2025-07-15": false,
+    "qwen/qwen3-235b-a22b-instruct-2507": false,
+    "qwen/qwen3-235b-a22b-thinking-2507": false,
+    "qwen/qwen3-30b-a3b-instruct-2507": false,
+    "qwen/qwen3-30b-a3b-thinking-2507": false,
+    "qwen/qwen3-coder-plus-2025-09-23": false,
+    "qwen/qwen3-max-2025-09-23": false,
+    "Doubao/doubao-pro-4k-character-240728": false,
+    "Doubao/doubao-pro-32k-functioncall-240815": false,
+    "Doubao/doubao-lite-32k-240628": false,
+    "Doubao/doubao-pro-128k-240628": false,
+    "Doubao/doubao-pro-32k-240615": false,
+    "Doubao/doubao-embedding-text-240715": false,
+    "Doubao/doubao-pro-4k-functioncall-240615": false,
+    "Doubao/doubao-pro-32k-browsing-240615": false,
+    "Doubao/doubao-pro-32k-functioncall-240515": false,
+    "Grok/grok-3": false,
+    "Grok/grok-3-mini": false,
+    "siliconflow/deepseek-v3.2": false,
+    "siliconflow/deepseek-r1-0528": false,
+    "siliconflow/deepseek-v3.1-terminus": false,
+    "siliconflow/deepseek-v3-0324": false
+  },
+  "model_routing_settings": {
+    "qwen/qwen3.5-plus": "/bailian",
+    "Qwen/qwen3.5-plus": "/bailian",
+    "GLM/glm-5": "/bailian",
+    "Qwen/qwen3.5-122b-a10b": "/local-sgl"
+  },
+  "model_redirects": {
+    "Qwen/Qwen3.5-9B": null
+  }
+}
