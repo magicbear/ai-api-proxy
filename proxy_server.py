@@ -31,6 +31,14 @@ model_display_settings_lock = Lock()
 model_cache_timestamps_lock = Lock()
 model_redirects_lock = Lock()
 
+# Server-side statistics tracking
+server_stats_lock = Lock()
+server_stats = {
+    'active_connections': 0,
+    'active_streams': 0,
+    'total_messages': 0
+}
+
 # Global variables for tracking connections and streams
 active_connections = {}
 active_streams = {}
@@ -159,8 +167,20 @@ class APIProxyServer:
         
         with active_connections_lock:
             active_connections[request_id] = connection_info
+        
+        # Update server stats
+        with server_stats_lock:
+            server_stats['active_connections'] = len(active_connections)
+            server_stats['total_messages'] += 1
+        
         try:
             socketio.emit('connection_added', {'connection': connection_info})
+            # Broadcast updated stats to all clients
+            socketio.emit('server_stats_update', {
+                'active_connections': server_stats['active_connections'],
+                'active_streams': server_stats['active_streams'],
+                'total_messages': server_stats['total_messages']
+            })
         except Exception as e:
             logger.error(f"Failed to emit connection_added event: {e}")
         
@@ -288,8 +308,20 @@ class APIProxyServer:
             }
             with active_streams_lock:
                 active_streams[request_id] = stream_info
+            
+            # Update server stats
+            with server_stats_lock:
+                server_stats['active_streams'] = len(active_streams)
+                server_stats['total_messages'] += 1
+            
             try:
                 socketio.emit('stream_started', {'stream': stream_info})
+                # Broadcast updated stats to all clients
+                socketio.emit('server_stats_update', {
+                    'active_connections': server_stats['active_connections'],
+                    'active_streams': server_stats['active_streams'],
+                    'total_messages': server_stats['total_messages']
+                })
             except Exception as e:
                 logger.error(f"Failed to emit stream_started event: {e}")
         
@@ -336,9 +368,20 @@ class APIProxyServer:
                         # Remove the connection from active list
                         del active_connections[request_id]
                 
+                # Update server stats
+                with server_stats_lock:
+                    server_stats['active_connections'] = len(active_connections)
+                    server_stats['total_messages'] += 1
+                
                 # Emit connection removal event to frontend
                 try:
                     socketio.emit('connection_removed', {'id': request_id})
+                    # Broadcast updated stats to all clients
+                    socketio.emit('server_stats_update', {
+                        'active_connections': server_stats['active_connections'],
+                        'active_streams': server_stats['active_streams'],
+                        'total_messages': server_stats['total_messages']
+                    })
                 except Exception as e:
                     logger.error(f"Failed to emit connection_removed event: {e}")
                 
@@ -350,6 +393,11 @@ class APIProxyServer:
                             active_streams[request_id]['response_size'] = final_response_size
                             del active_streams[request_id]
                     
+                    # Update server stats
+                    with server_stats_lock:
+                        server_stats['active_streams'] = len(active_streams)
+                        server_stats['total_messages'] += 1
+                    
                     # Emit stream finished event to frontend
                     try:
                         socketio.emit('stream_finished', {
@@ -357,6 +405,12 @@ class APIProxyServer:
                             'timestamp': datetime.now().isoformat(),
                             'response_size': final_response_size,
                             'response_size_kb': round(final_response_size / 1024, 2)
+                        })
+                        # Broadcast updated stats to all clients
+                        socketio.emit('server_stats_update', {
+                            'active_connections': server_stats['active_connections'],
+                            'active_streams': server_stats['active_streams'],
+                            'total_messages': server_stats['total_messages']
                         })
                     except Exception as e:
                         logger.error(f"Failed to emit stream_finished event: {e}")
@@ -789,12 +843,17 @@ def handle_connect():
     with model_redirects_lock:
         redirects_data = model_redirects.copy()
     
+    # Update server stats before sending initial data
+    with server_stats_lock:
+        current_server_stats = server_stats.copy()
+    
     emit('initial_data', {
         'connections': connections_data,
         'streams': streams_data,
         'token_stats': stats_data,
         'models': models_data,
-        'redirects': redirects_data
+        'redirects': redirects_data,
+        'server_stats': current_server_stats
     })
 
 
@@ -1057,9 +1116,21 @@ def handle_aggregated_request(flask_request, endpoint_config):
         }
         with active_streams_lock:
             active_streams[request_id] = stream_info
+        
+        # Update server stats
+        with server_stats_lock:
+            server_stats['active_streams'] = len(active_streams)
+            server_stats['total_messages'] += 1
+        
         # Use emit with callback to ensure it's sent
         try:
             socketio.emit('stream_started', {'stream': stream_info})
+            # Broadcast updated stats to all clients
+            socketio.emit('server_stats_update', {
+                'active_connections': server_stats['active_connections'],
+                'active_streams': server_stats['active_streams'],
+                'total_messages': server_stats['total_messages']
+            })
         except Exception as e:
             import traceback
             logger.error(f"Failed to emit stream_started event: {e}")
@@ -1110,9 +1181,20 @@ def handle_aggregated_request(flask_request, endpoint_config):
                     # Remove the connection from active list
                     del active_connections[request_id]
             
+            # Update server stats
+            with server_stats_lock:
+                server_stats['active_connections'] = len(active_connections)
+                server_stats['total_messages'] += 1
+            
             # Emit connection removal event to frontend
             try:
                 socketio.emit('connection_removed', {'id': request_id})
+                # Broadcast updated stats to all clients
+                socketio.emit('server_stats_update', {
+                    'active_connections': server_stats['active_connections'],
+                    'active_streams': server_stats['active_streams'],
+                    'total_messages': server_stats['total_messages']
+                })
             except Exception as e:
                 import traceback
                 logger.error(f"Failed to emit connection_removed event: {e}")
@@ -1126,6 +1208,11 @@ def handle_aggregated_request(flask_request, endpoint_config):
                         active_streams[request_id]['response_size'] = final_response_size
                         del active_streams[request_id]
                 
+                # Update server stats
+                with server_stats_lock:
+                    server_stats['active_streams'] = len(active_streams)
+                    server_stats['total_messages'] += 1
+                
                 # Emit stream finished event to frontend
                 try:
                     socketio.emit('stream_finished', {
@@ -1133,6 +1220,12 @@ def handle_aggregated_request(flask_request, endpoint_config):
                         'timestamp': datetime.now().isoformat(),
                         'response_size': final_response_size,
                         'response_size_kb': round(final_response_size / 1024, 2)
+                    })
+                    # Broadcast updated stats to all clients
+                    socketio.emit('server_stats_update', {
+                        'active_connections': server_stats['active_connections'],
+                        'active_streams': server_stats['active_streams'],
+                        'total_messages': server_stats['total_messages']
                     })
                 except Exception as e:
                     import traceback
