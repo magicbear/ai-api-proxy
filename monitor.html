@@ -365,6 +365,10 @@
             if (data.token_stats) {
                 updateTokenStats(data.token_stats);
             }
+            // Update server stats if available in initial data
+            if (data.server_stats) {
+                updateServerStats(data.server_stats);
+            }
         });
         
         socket.on('token_stats_update', function(data) {
@@ -374,39 +378,38 @@
         
         socket.on('connection_added', function(data) {
             addConnection(data.connection);
-            messagesCount++;
-            updateStats();
+            // Note: messagesCount and stats are now managed by server_stats_update
         });
         
         // Listen for connection updates (e.g., response size)
         socket.on('connection_updated', function(data) {
             updateConnection(data);
-            messagesCount++;
-            updateStats();
+            // Note: messagesCount and stats are now managed by server_stats_update
         });
         
         socket.on('connection_removed', function(data) {
             removeConnection(data.id);
-            messagesCount++;
-            updateStats();
+            // Note: messagesCount and stats are now managed by server_stats_update
         });
         
         socket.on('stream_started', function(data) {
             addStream(data.stream);
-            messagesCount++;
-            updateStats();
+            // Note: messagesCount and stats are now managed by server_stats_update
         });
         
         socket.on('stream_finished', function(data) {
             updateStreamStatus(data.id, 'completed');
-            messagesCount++;
-            updateStats();
+            // Note: messagesCount and stats are now managed by server_stats_update
         });
         
         socket.on('stream_chunk', function(data) {
             updateStreamData(data.data);
-            messagesCount++;
-            updateStats();
+            // Note: messagesCount and stats are now managed by server_stats_update
+        });
+        
+        // Receive server-side statistics updates
+        socket.on('server_stats_update', function(data) {
+            updateServerStats(data);
         });
         
         // Handle request completion for non-streaming requests
@@ -416,10 +419,15 @@
             // But we can perform any additional cleanup here if needed
         });
         
+        function updateServerStats(data) {
+            document.getElementById('connections-count').textContent = data.active_connections || 0;
+            document.getElementById('streams-count').textContent = data.active_streams || 0;
+            document.getElementById('messages-count').textContent = data.total_messages || 0;
+        }
+        
         function updateStats() {
-            document.getElementById('connections-count').textContent = connectionsCount;
-            document.getElementById('streams-count').textContent = streamsCount;
-            document.getElementById('messages-count').textContent = messagesCount;
+            // Now stats are managed by server, this function can be kept for compatibility
+            // but server stats will override these values
         }
         
         function updateInitialData(data) {
