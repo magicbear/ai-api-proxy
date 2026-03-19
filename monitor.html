@@ -378,6 +378,13 @@
             updateStats();
         });
         
+        // Listen for connection updates (e.g., response size)
+        socket.on('connection_updated', function(data) {
+            updateConnection(data);
+            messagesCount++;
+            updateStats();
+        });
+        
         socket.on('connection_removed', function(data) {
             removeConnection(data.id);
             messagesCount++;
@@ -449,7 +456,7 @@
             const remoteAddress = connection.remoteAddress || 'Unknown';
             
             // Extract model name from URL if it's a chat completion request
-            let modelName = '';
+            let additionalInfo = '';
             if (connection.url && (connection.url.includes('/chat/completions') || connection.url.includes('/v1/chat'))) {
                 // Look for model information in various possible locations
                 let model = '';
@@ -462,8 +469,14 @@
                 }
                 
                 if (model) {
-                    modelName = ` | Model: ${model}`;
+                    additionalInfo = ` | Model: ${model}`;
                 }
+            }
+            
+            // Add request size information if available
+            if (connection.request_size !== undefined) {
+                const sizeKb = (connection.request_size / 1024).toFixed(2);
+                additionalInfo += ` | Size: ${connection.request_size} bytes (${sizeKb} KB)`;
             }
             
             item.innerHTML = `
@@ -473,7 +486,7 @@
                 </div>
                 ${endpointInfo}
                 ${targetUrlInfo}
-                <div class="timestamp">${connection.timestamp} from ${remoteAddress}${modelName}</div>
+                <div class="timestamp">${connection.timestamp} from ${remoteAddress}${additionalInfo}</div>
                 ${durationInfo}
             `;
             
@@ -518,6 +531,23 @@
                 item.remove();
                 connectionsCount--;
                 updateStats();
+            }
+        }
+        
+        function updateConnection(updateData) {
+            const item = document.getElementById(`conn-${updateData.id}`);
+            if (item) {
+                // Update the connection item with response size information
+                const responseSizeInfo = updateData.response_size !== undefined ? 
+                    ` | Response: ${updateData.response_size} bytes (${updateData.response_size_kb} KB)` : '';
+                
+                // Find the timestamp element and append the response size info
+                const timestampEl = item.querySelector('.timestamp');
+                if (timestampEl) {
+                    // Remove any existing response size info
+                    let baseText = timestampEl.innerHTML.replace(/\s*\|\s*Response:\s*[0-9,.]+\s*bytes\s*\([0-9,.]+\s*KB\)/g, '');
+                    timestampEl.innerHTML = baseText + responseSizeInfo;
+                }
             }
         }
         
