@@ -140,6 +140,9 @@ class APIProxyServer:
             except:
                 pass  # If JSON parsing fails, continue without model info
 
+        # Calculate request size
+        request_size = len(req.get_data()) if req.get_data() else 0
+        
         connection_info = {
             'id': request_id,
             'method': req.method,
@@ -150,7 +153,8 @@ class APIProxyServer:
             'remote_address': request.remote_addr,
             'endpoint': endpoint_prefix,
             'target_url': target_base_url,
-            'model': model_name  # Add model information to connection info
+            'model': model_name,  # Add model information to connection info
+            'request_size': request_size  # Add request size in bytes
         }
         
         with active_connections_lock:
@@ -310,6 +314,18 @@ class APIProxyServer:
             def on_response_close():
                 with active_connections_lock:
                     if request_id in active_connections:
+                        # Update connection info with response size before removing
+                        active_connections[request_id]['response_size'] = response_size
+                        # Also emit an update event with the final response size
+                        try:
+                            socketio.emit('connection_updated', {
+                                'id': request_id,
+                                'response_size': response_size,
+                                'response_size_kb': round(response_size / 1024, 2)
+                            })
+                        except Exception as e:
+                            logger.error(f"Failed to emit connection_updated event: {e}")
+                        
                         del active_connections[request_id]
                 try:
                     socketio.emit('connection_removed', {'id': request_id})
@@ -319,11 +335,15 @@ class APIProxyServer:
                 if is_chat_completions and is_streaming:
                     with active_streams_lock:
                         if request_id in active_streams:
+                            # Update stream info with response size
+                            active_streams[request_id]['response_size'] = response_size
                             del active_streams[request_id]
                     try:
                         socketio.emit('stream_finished', {
                             'id': request_id,
-                            'timestamp': datetime.now().isoformat()
+                            'timestamp': datetime.now().isoformat(),
+                            'response_size': response_size,
+                            'response_size_kb': round(response_size / 1024, 2)
                         })
                     except Exception as e:
                         logger.error(f"Failed to emit stream_finished event: {e}")
@@ -333,8 +353,14 @@ class APIProxyServer:
                 try:
                     is_gzipped = response.headers.get('Content-Encoding', '') == 'gzip'
                     
+                    # Track response size
+                    response_size = 0
+                    
                     for chunk in response.iter_content(chunk_size=1024):
                         if chunk:
+                            # Track response size
+                            response_size += len(chunk)
+                            
                             # If the response is gzipped, decompress it before sending
                             if is_gzipped:
                                 try:
@@ -900,6 +926,9 @@ def handle_aggregated_request(flask_request, endpoint_config):
         except:
             pass  # If JSON parsing fails, continue without model info
 
+    # Calculate request size
+    request_size = len(flask_request.get_data()) if flask_request.get_data() else 0
+
     connection_info = {
         'id': request_id,
         'method': flask_request.method,
@@ -909,7 +938,8 @@ def handle_aggregated_request(flask_request, endpoint_config):
         'remote_address': flask_request.remote_addr,
         'endpoint': endpoint_prefix,  # Show the endpoint being used
         'target_url': target_base_url,  # Show the upstream target
-        'model': model_name  # Add model information to connection info
+        'model': model_name,  # Add model information to connection info
+        'request_size': request_size  # Add request size in bytes
     }
     
     with active_connections_lock:
@@ -1033,6 +1063,18 @@ def handle_aggregated_request(flask_request, endpoint_config):
         def on_response_close():
             with active_connections_lock:
                 if request_id in active_connections:
+                    # Update connection info with response size before removing
+                    active_connections[request_id]['response_size'] = response_size
+                    # Also emit an update event with the final response size
+                    try:
+                        socketio.emit('connection_updated', {
+                            'id': request_id,
+                            'response_size': response_size,
+                            'response_size_kb': round(response_size / 1024, 2)
+                        })
+                    except Exception as e:
+                        logger.error(f"Failed to emit connection_updated event: {e}")
+                    
                     del active_connections[request_id]
             try:
                 socketio.emit('connection_removed', {'id': request_id})
@@ -1044,11 +1086,15 @@ def handle_aggregated_request(flask_request, endpoint_config):
             if is_streaming:
                 with active_streams_lock:
                     if request_id in active_streams:
+                        # Update stream info with response size
+                        active_streams[request_id]['response_size'] = response_size
                         del active_streams[request_id]
                 try:
                     socketio.emit('stream_finished', {
                         'id': request_id,
-                        'timestamp': datetime.now().isoformat()
+                        'timestamp': datetime.now().isoformat(),
+                        'response_size': response_size,
+                        'response_size_kb': round(response_size / 1024, 2)
                     })
                 except Exception as e:
                     import traceback
@@ -1061,8 +1107,14 @@ def handle_aggregated_request(flask_request, endpoint_config):
                 # Check if the response is gzipped and handle accordingly
                 is_gzipped = response.headers.get('Content-Encoding', '') == 'gzip'
                 
+                # Track response size
+                response_size = 0
+                
                 for chunk in response.iter_content(chunk_size=1024):
                     if chunk:
+                        # Track response size
+                        response_size += len(chunk)
+                        
                         # If the response is gzipped, decompress it before sending
                         if is_gzipped:
                             import gzip
