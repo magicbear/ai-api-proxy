@@ -312,6 +312,7 @@ class APIProxyServer:
             
             # Clean up tracking after response is complete
             def on_response_close():
+                # Update the connection info with response size before removal
                 with active_connections_lock:
                     if request_id in active_connections:
                         # Update connection info with response size before removing
@@ -326,18 +327,24 @@ class APIProxyServer:
                         except Exception as e:
                             logger.error(f"Failed to emit connection_updated event: {e}")
                         
+                        # Remove the connection from active list
                         del active_connections[request_id]
+                
+                # Emit connection removal event to frontend
                 try:
                     socketio.emit('connection_removed', {'id': request_id})
                 except Exception as e:
                     logger.error(f"Failed to emit connection_removed event: {e}")
                 
                 if is_chat_completions and is_streaming:
+                    # Update stream info with response size and remove from active list
                     with active_streams_lock:
                         if request_id in active_streams:
                             # Update stream info with response size
                             active_streams[request_id]['response_size'] = response_size
                             del active_streams[request_id]
+                    
+                    # Emit stream finished event to frontend
                     try:
                         socketio.emit('stream_finished', {
                             'id': request_id,
@@ -347,6 +354,17 @@ class APIProxyServer:
                         })
                     except Exception as e:
                         logger.error(f"Failed to emit stream_finished event: {e}")
+                else:
+                    # For non-streaming requests, also emit a completion event
+                    try:
+                        socketio.emit('request_completed', {
+                            'id': request_id,
+                            'timestamp': datetime.now().isoformat(),
+                            'response_size': response_size,
+                            'response_size_kb': round(response_size / 1024, 2)
+                        })
+                    except Exception as e:
+                        logger.error(f"Failed to emit request_completed event: {e}")
             
             # Stream the response back to the client
             def generate():
@@ -1061,6 +1079,7 @@ def handle_aggregated_request(flask_request, endpoint_config):
         
         # Clean up tracking after response is complete
         def on_response_close():
+            # Update the connection info with response size before removal
             with active_connections_lock:
                 if request_id in active_connections:
                     # Update connection info with response size before removing
@@ -1075,7 +1094,10 @@ def handle_aggregated_request(flask_request, endpoint_config):
                     except Exception as e:
                         logger.error(f"Failed to emit connection_updated event: {e}")
                     
+                    # Remove the connection from active list
                     del active_connections[request_id]
+            
+            # Emit connection removal event to frontend
             try:
                 socketio.emit('connection_removed', {'id': request_id})
             except Exception as e:
@@ -1084,11 +1106,14 @@ def handle_aggregated_request(flask_request, endpoint_config):
                 logger.error(f"Traceback: {traceback.format_exc()}")
             
             if is_streaming:
+                # Update stream info with response size and remove from active list
                 with active_streams_lock:
                     if request_id in active_streams:
                         # Update stream info with response size
                         active_streams[request_id]['response_size'] = response_size
                         del active_streams[request_id]
+                
+                # Emit stream finished event to frontend
                 try:
                     socketio.emit('stream_finished', {
                         'id': request_id,
@@ -1100,6 +1125,17 @@ def handle_aggregated_request(flask_request, endpoint_config):
                     import traceback
                     logger.error(f"Failed to emit stream_finished event: {e}")
                     logger.error(f"Traceback: {traceback.format_exc()}")
+            else:
+                # For non-streaming requests, also emit a completion event
+                try:
+                    socketio.emit('request_completed', {
+                        'id': request_id,
+                        'timestamp': datetime.now().isoformat(),
+                        'response_size': response_size,
+                        'response_size_kb': round(response_size / 1024, 2)
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to emit request_completed event: {e}")
         
         # Stream the response back to the client
         def generate():
