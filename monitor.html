@@ -409,6 +409,13 @@
             updateStats();
         });
         
+        // Handle request completion for non-streaming requests
+        socket.on('request_completed', function(data) {
+            console.log('Request completed:', data);
+            // The connection should already be removed by connection_removed event
+            // But we can perform any additional cleanup here if needed
+        });
+        
         function updateStats() {
             document.getElementById('connections-count').textContent = connectionsCount;
             document.getElementById('streams-count').textContent = streamsCount;
@@ -520,7 +527,7 @@
                     clearInterval(item.durationInterval);
                 }
                 item.remove();
-                connectionsCount--;
+                connectionsCount = Math.max(0, connectionsCount - 1); // Prevent negative counts
                 updateStats();
             }
         }
@@ -629,44 +636,65 @@
             const streamDataEl = document.getElementById('stream-data');
             
             // Extract the actual content from the chunk
-            let content = data.chunk;
+            let content = '';
             
-            // Remove the 'data: ' prefix
-            if (content.startsWith('data: ')) {
-                content = content.substring(6); // Remove 'data: ' prefix
-            }
-            
-            // Check if this is just a [DONE] marker
-            if (content.trim() === '[DONE]' || content.trim() === '[DONE]\n') {
-                return; // Don't add [DONE] to the display
-            }
-            
-            // Try to parse as JSON and extract the content
-            try {
-                const parsed = JSON.parse(content);
-                if (parsed.choices && parsed.choices.length > 0) {
-                    const choice = parsed.choices[0];
-                    if (choice.delta && choice.delta.content) {
-                        content = choice.delta.content; // Get the actual content
-                    } else if (choice.message && choice.message.content) {
-                        content = choice.message.content; // Get the actual content
-                    } else {
-                        // If no content field, show empty string
-                        content = '';
-                    }
-                } else if (parsed.content) {
-                    content = parsed.content; // Direct content field
+            // Check if data has delta information (typical for chat/completions)
+            if (data.delta && data.delta.content) {
+                content = data.delta.content; // Get the actual content from delta
+            } else if (data.parsed_data && data.parsed_data.choices && data.parsed_data.choices.length > 0) {
+                const choice = data.parsed_data.choices[0];
+                if (choice.delta && choice.delta.content) {
+                    content = choice.delta.content; // Get the actual content from delta
+                } else if (choice.message && choice.message.content) {
+                    content = choice.message.content; // Get the actual content from message
                 } else {
-                    // If it's valid JSON but doesn't match our expectations, show empty
-                    content = '';
+                    // If we have parsed data but no content, display a summary
+                    content = `[${JSON.stringify(data.parsed_data).substring(0, 100)}...]`;
                 }
-            } catch (e) {
-                // If not valid JSON, it might be some other valid content, keep as is
-                // Just make sure it's not [DONE] which was already handled above
+            } else if (data.chunk) {
+                // Fallback to original chunk processing
+                content = data.chunk;
+                
+                // Remove the 'data: ' prefix
+                if (content.startsWith('data: ')) {
+                    content = content.substring(6); // Remove 'data: ' prefix
+                }
+                
+                // Check if this is just a [DONE] marker
+                if (content.trim() === '[DONE]' || content.trim() === '[DONE]\n') {
+                    content = '[STREAM COMPLETED]';
+                }
+                
+                // Try to parse as JSON and extract the content
+                try {
+                    const parsed = JSON.parse(content);
+                    if (parsed.choices && parsed.choices.length > 0) {
+                        const choice = parsed.choices[0];
+                        if (choice.delta && choice.delta.content) {
+                            content = choice.delta.content; // Get the actual content
+                        } else if (choice.message && choice.message.content) {
+                            content = choice.message.content; // Get the actual content
+                        } else {
+                            // If no content field, show a summary
+                            content = `[${JSON.stringify(parsed).substring(0, 100)}...]`;
+                        }
+                    } else if (parsed.content) {
+                        content = parsed.content; // Direct content field
+                    } else {
+                        // If it's valid JSON but doesn't match our expectations, show a summary
+                        content = `[${JSON.stringify(parsed).substring(0, 100)}...]`;
+                    }
+                } catch (e) {
+                    // If not valid JSON, it might be some other valid content
+                    // Just make sure it's not [DONE] which was already handled above
+                    if (content !== '[STREAM COMPLETED]') {
+                        content = content.substring(0, 200) + '...';
+                    }
+                }
             }
             
             // Only add content if it's not empty
-            if (content && content.trim() !== '') {
+            if (content && content.trim() !== '' && content !== '[STREAM COMPLETED]') {
                 // Append new content to the display
                 let currentData = streamDataEl.textContent;
                 currentData = currentData + content;
@@ -677,6 +705,9 @@
                 }
                 
                 streamDataEl.textContent = currentData;
+            } else if (content === '[STREAM COMPLETED]') {
+                // Indicate stream completion
+                streamDataEl.textContent += '\n[STREAM COMPLETED]';
             }
             
             // Scroll to bottom
