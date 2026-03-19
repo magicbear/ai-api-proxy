@@ -370,12 +370,13 @@ class APIProxyServer:
                         logger.error(f"Failed to emit request_completed event: {e}")
             
             # Stream the response back to the client
+            # Initialize response_size variable to be accessible in on_response_close
+            response_size = 0
+            
             def generate():
+                nonlocal response_size  # Allow modification of response_size from outer scope
                 try:
                     is_gzipped = response.headers.get('Content-Encoding', '') == 'gzip'
-                    
-                    # Track response size
-                    response_size = 0
                     
                     for chunk in response.iter_content(chunk_size=1024):
                         if chunk:
@@ -1144,13 +1145,14 @@ def handle_aggregated_request(flask_request, endpoint_config):
                     logger.error(f"Failed to emit request_completed event: {e}")
         
         # Stream the response back to the client
+        # Initialize response_size variable to be accessible in on_response_close
+        response_size = 0
+        
         def generate():
+            nonlocal response_size  # Allow modification of response_size from outer scope
             try:
                 # Check if the response is gzipped and handle accordingly
                 is_gzipped = response.headers.get('Content-Encoding', '') == 'gzip'
-                
-                # Track response size
-                response_size = 0
                 
                 for chunk in response.iter_content(chunk_size=1024):
                     if chunk:
