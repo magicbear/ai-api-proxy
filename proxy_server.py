@@ -310,6 +310,9 @@ class APIProxyServer:
             else:
                 return jsonify({"error": f"Method {req.method} not supported"}), 405
             
+            # Initialize response_size variable to be accessible in on_response_close
+            response_size = 0
+            
             # Clean up tracking after response is complete
             def on_response_close():
                 # Update the connection info with response size before removal
@@ -1076,6 +1079,9 @@ def handle_aggregated_request(flask_request, endpoint_config):
             response = requests.patch(target_url, headers=headers, data=data, stream=True)
         else:
             return jsonify({"error": f"Method {flask_request.method} not supported"}), 405
+        
+        # Initialize response_size variable to be accessible in on_response_close
+        response_size = 0
         
         # Clean up tracking after response is complete
         def on_response_close():
