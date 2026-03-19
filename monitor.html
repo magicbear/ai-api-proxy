@@ -445,6 +445,27 @@
             const targetUrlInfo = connection.target_url ? 
                 `<div class="target-url">Target: ${connection.target_url}</div>` : '';
             
+            // Safely handle remoteAddress to avoid "from undefined"
+            const remoteAddress = connection.remoteAddress || 'Unknown';
+            
+            // Extract model name from URL if it's a chat completion request
+            let modelName = '';
+            if (connection.url && (connection.url.includes('/chat/completions') || connection.url.includes('/v1/chat'))) {
+                // Look for model information in various possible locations
+                let model = '';
+                if (connection.model) {
+                    model = connection.model;
+                } else if (connection.headers && connection.headers['x-model-name']) {
+                    model = connection.headers['x-model-name'];
+                } else if (connection.request_body && typeof connection.request_body === 'object' && connection.request_body.model) {
+                    model = connection.request_body.model;
+                }
+                
+                if (model) {
+                    modelName = ` | Model: ${model}`;
+                }
+            }
+            
             item.innerHTML = `
                 <div>
                     <span class="method">${connection.method}</span>
@@ -452,7 +473,7 @@
                 </div>
                 ${endpointInfo}
                 ${targetUrlInfo}
-                <div class="timestamp">${connection.timestamp} from ${connection.remoteAddress}</div>
+                <div class="timestamp">${connection.timestamp} from ${remoteAddress}${modelName}</div>
                 ${durationInfo}
             `;
             

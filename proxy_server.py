@@ -130,6 +130,16 @@ class APIProxyServer:
         endpoint_prefix = endpoint_config.get('proxy_path_prefix', 'unknown')
         target_base_url = endpoint_config.get('target_base_url', 'unknown')
         
+        # Extract model from request if it's a chat completion request
+        model_name = None
+        if req.is_json and ('/chat/completions' in req.full_path or '/v1/chat' in req.full_path):
+            try:
+                json_data = req.get_json()
+                if json_data and isinstance(json_data, dict):
+                    model_name = json_data.get('model', None)
+            except:
+                pass  # If JSON parsing fails, continue without model info
+
         connection_info = {
             'id': request_id,
             'method': req.method,
@@ -139,7 +149,8 @@ class APIProxyServer:
             'headers': dict(req.headers),
             'remote_address': request.remote_addr,
             'endpoint': endpoint_prefix,
-            'target_url': target_base_url
+            'target_url': target_base_url,
+            'model': model_name  # Add model information to connection info
         }
         
         with active_connections_lock:
@@ -879,6 +890,16 @@ def handle_aggregated_request(flask_request, endpoint_config):
     endpoint_prefix = endpoint_config.get('proxy_path_prefix', 'unknown')
     target_base_url = endpoint_config.get('target_base_url', 'unknown')
     
+    # Extract model from request if it's a chat completion request
+    model_name = None
+    if flask_request.is_json and ('/chat/completions' in flask_request.full_path or '/v1/chat' in flask_request.full_path):
+        try:
+            json_data = flask_request.get_json()
+            if json_data and isinstance(json_data, dict):
+                model_name = json_data.get('model', None)
+        except:
+            pass  # If JSON parsing fails, continue without model info
+
     connection_info = {
         'id': request_id,
         'method': flask_request.method,
@@ -887,7 +908,8 @@ def handle_aggregated_request(flask_request, endpoint_config):
         'headers': dict(flask_request.headers),
         'remote_address': flask_request.remote_addr,
         'endpoint': endpoint_prefix,  # Show the endpoint being used
-        'target_url': target_base_url  # Show the upstream target
+        'target_url': target_base_url,  # Show the upstream target
+        'model': model_name  # Add model information to connection info
     }
     
     with active_connections_lock:
