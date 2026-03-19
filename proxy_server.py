@@ -315,17 +315,20 @@ class APIProxyServer:
             
             # Clean up tracking after response is complete
             def on_response_close():
+                # Get the final response size from the container
+                final_response_size = response_size_container['size']
+                
                 # Update the connection info with response size before removal
                 with active_connections_lock:
                     if request_id in active_connections:
                         # Update connection info with response size before removing
-                        active_connections[request_id]['response_size'] = response_size
+                        active_connections[request_id]['response_size'] = final_response_size
                         # Also emit an update event with the final response size
                         try:
                             socketio.emit('connection_updated', {
                                 'id': request_id,
-                                'response_size': response_size,
-                                'response_size_kb': round(response_size / 1024, 2)
+                                'response_size': final_response_size,
+                                'response_size_kb': round(final_response_size / 1024, 2)
                             })
                         except Exception as e:
                             logger.error(f"Failed to emit connection_updated event: {e}")
@@ -344,7 +347,7 @@ class APIProxyServer:
                     with active_streams_lock:
                         if request_id in active_streams:
                             # Update stream info with response size
-                            active_streams[request_id]['response_size'] = response_size
+                            active_streams[request_id]['response_size'] = final_response_size
                             del active_streams[request_id]
                     
                     # Emit stream finished event to frontend
@@ -352,8 +355,8 @@ class APIProxyServer:
                         socketio.emit('stream_finished', {
                             'id': request_id,
                             'timestamp': datetime.now().isoformat(),
-                            'response_size': response_size,
-                            'response_size_kb': round(response_size / 1024, 2)
+                            'response_size': final_response_size,
+                            'response_size_kb': round(final_response_size / 1024, 2)
                         })
                     except Exception as e:
                         logger.error(f"Failed to emit stream_finished event: {e}")
@@ -363,25 +366,24 @@ class APIProxyServer:
                         socketio.emit('request_completed', {
                             'id': request_id,
                             'timestamp': datetime.now().isoformat(),
-                            'response_size': response_size,
-                            'response_size_kb': round(response_size / 1024, 2)
+                            'response_size': final_response_size,
+                            'response_size_kb': round(final_response_size / 1024, 2)
                         })
                     except Exception as e:
                         logger.error(f"Failed to emit request_completed event: {e}")
             
-            # Stream the response back to the client
             # Initialize response_size variable to be accessible in on_response_close
-            response_size = 0
+            # We'll use a mutable container to hold the value so it can be modified by inner functions
+            response_size_container = {'size': 0}
             
             def generate():
-                nonlocal response_size  # Allow modification of response_size from outer scope
                 try:
                     is_gzipped = response.headers.get('Content-Encoding', '') == 'gzip'
                     
                     for chunk in response.iter_content(chunk_size=1024):
                         if chunk:
                             # Track response size
-                            response_size += len(chunk)
+                            response_size_container['size'] += len(chunk)
                             
                             # If the response is gzipped, decompress it before sending
                             if is_gzipped:
@@ -1082,21 +1084,25 @@ def handle_aggregated_request(flask_request, endpoint_config):
             return jsonify({"error": f"Method {flask_request.method} not supported"}), 405
         
         # Initialize response_size variable to be accessible in on_response_close
-        response_size = 0
+        # We'll use a mutable container to hold the value so it can be modified by inner functions
+        response_size_container = {'size': 0}
         
         # Clean up tracking after response is complete
         def on_response_close():
+            # Get the final response size from the container
+            final_response_size = response_size_container['size']
+            
             # Update the connection info with response size before removal
             with active_connections_lock:
                 if request_id in active_connections:
                     # Update connection info with response size before removing
-                    active_connections[request_id]['response_size'] = response_size
+                    active_connections[request_id]['response_size'] = final_response_size
                     # Also emit an update event with the final response size
                     try:
                         socketio.emit('connection_updated', {
                             'id': request_id,
-                            'response_size': response_size,
-                            'response_size_kb': round(response_size / 1024, 2)
+                            'response_size': final_response_size,
+                            'response_size_kb': round(final_response_size / 1024, 2)
                         })
                     except Exception as e:
                         logger.error(f"Failed to emit connection_updated event: {e}")
@@ -1117,7 +1123,7 @@ def handle_aggregated_request(flask_request, endpoint_config):
                 with active_streams_lock:
                     if request_id in active_streams:
                         # Update stream info with response size
-                        active_streams[request_id]['response_size'] = response_size
+                        active_streams[request_id]['response_size'] = final_response_size
                         del active_streams[request_id]
                 
                 # Emit stream finished event to frontend
@@ -1125,8 +1131,8 @@ def handle_aggregated_request(flask_request, endpoint_config):
                     socketio.emit('stream_finished', {
                         'id': request_id,
                         'timestamp': datetime.now().isoformat(),
-                        'response_size': response_size,
-                        'response_size_kb': round(response_size / 1024, 2)
+                        'response_size': final_response_size,
+                        'response_size_kb': round(final_response_size / 1024, 2)
                     })
                 except Exception as e:
                     import traceback
@@ -1138,18 +1144,18 @@ def handle_aggregated_request(flask_request, endpoint_config):
                     socketio.emit('request_completed', {
                         'id': request_id,
                         'timestamp': datetime.now().isoformat(),
-                        'response_size': response_size,
-                        'response_size_kb': round(response_size / 1024, 2)
+                        'response_size': final_response_size,
+                        'response_size_kb': round(final_response_size / 1024, 2)
                     })
                 except Exception as e:
                     logger.error(f"Failed to emit request_completed event: {e}")
         
         # Stream the response back to the client
         # Initialize response_size variable to be accessible in on_response_close
-        response_size = 0
+        # We'll use a mutable container to hold the value so it can be modified by inner functions
+        response_size_container = {'size': 0}
         
         def generate():
-            nonlocal response_size  # Allow modification of response_size from outer scope
             try:
                 # Check if the response is gzipped and handle accordingly
                 is_gzipped = response.headers.get('Content-Encoding', '') == 'gzip'
@@ -1157,7 +1163,7 @@ def handle_aggregated_request(flask_request, endpoint_config):
                 for chunk in response.iter_content(chunk_size=1024):
                     if chunk:
                         # Track response size
-                        response_size += len(chunk)
+                        response_size_container['size'] += len(chunk)
                         
                         # If the response is gzipped, decompress it before sending
                         if is_gzipped:
