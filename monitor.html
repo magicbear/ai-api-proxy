@@ -1253,7 +1253,16 @@
                 }
                 
                 // Show current redirect status
-                const redirectStatus = currentRedirect ? `Currently redirects to: <strong>${currentRedirect}</strong>` : 'No redirect configured';
+                let redirectStatus = currentRedirect ? `Currently redirects to: <strong>${currentRedirect}</strong>` : 'No redirect configured';
+                
+                // Find the target endpoint for the redirected model
+                if (currentRedirect) {
+                    const targetModel = allModelsData.models.find(m => m.id.toLowerCase() === currentRedirect.toLowerCase() || m.original_id?.toLowerCase() === currentRedirect.toLowerCase());
+                    if (targetModel && targetModel.source_endpoint) {
+                        redirectStatus += `<br>Target endpoint: <strong>${targetModel.source_endpoint}</strong>`;
+                    }
+                }
+                
                 html += `</select>
                                <div style="margin-top: 5px; font-size: 0.9em; color: #4CAF50;">${redirectStatus}</div>
                                <button onclick="saveTargetModel('${modelName}', document.getElementById('target-model-${modelName}').value)"

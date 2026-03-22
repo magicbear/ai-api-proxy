@@ -84,16 +84,46 @@
   ],
   "port": 16900,
   "prefix_map": [
-    ["grok", "Grok"],
-    ["deepseek", "Deepseek"], 
-    ["qwen3.5", "Qwen3.5"],
-    ["qwen3", "Qwen3"],
-    ["qwen", "Qwen"],
-    ["nemotron3", "Nvidia"],
-    ["glm", "GLM"],
-    ["kimi", "Kimi"],
-    ["minimax", "MiniMax"],
-    ["doubao", "Doubao"]
+    [
+      "grok",
+      "Grok"
+    ],
+    [
+      "deepseek",
+      "Deepseek"
+    ],
+    [
+      "qwen3.5",
+      "Qwen3.5"
+    ],
+    [
+      "qwen3",
+      "Qwen3"
+    ],
+    [
+      "qwen",
+      "Qwen"
+    ],
+    [
+      "nemotron3",
+      "Nvidia"
+    ],
+    [
+      "glm",
+      "GLM"
+    ],
+    [
+      "kimi",
+      "Kimi"
+    ],
+    [
+      "minimax",
+      "MiniMax"
+    ],
+    [
+      "doubao",
+      "Doubao"
+    ]
   ],
   "model_display_settings": {
     "grok-3": false,
@@ -173,6 +203,7 @@
   "model_redirects": {
     "Qwen/Qwen3.5-9B": null,
     "Qwen/qwen3.5-122b-a10b": null,
-    "Qwen3-122B": "qwen3.5-122b-a10b"
+    "Qwen3-122B": "qwen3.5-122b-a10b",
+    "Qwen3-Coder": "qwen-coder-plus"
   }
 }
