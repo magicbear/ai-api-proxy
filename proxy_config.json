@@ -5,7 +5,7 @@
       "models": [
         "Qwen3-122B",
         "Qwen3-Coder",
-        "Nvidia-Nemotron3",
+        "Nemotron3",
         "Kimi",
         "GLM",
         "MiniMax",
@@ -86,9 +86,10 @@
   "prefix_map": [
     ["grok", "Grok"],
     ["deepseek", "Deepseek"], 
-    ["qwen3.5", "Qwen"],
-    ["qwen3", "Qwen"],
+    ["qwen3.5", "Qwen3.5"],
+    ["qwen3", "Qwen3"],
     ["qwen", "Qwen"],
+    ["nemotron3", "Nvidia"],
     ["glm", "GLM"],
     ["kimi", "Kimi"],
     ["minimax", "MiniMax"],
