@@ -257,7 +257,8 @@
         <div class="tab-navigation">
             <button class="tab-button active" onclick="switchTab('monitor')">Monitor</button>
             <button class="tab-button" onclick="switchTab('statistics')">Statistics</button>
-            <button class="tab-button" onclick="switchTab('settings')">Settings</button>
+            <button class="tab-button" onclick="switchTab('model-routing')">Model Routing</button>
+            <button class="tab-button" onclick="switchTab('proxy-settings')">Proxy Settings</button>
         </div>
         
         <!-- Stats Summary (always visible) -->
@@ -314,7 +315,8 @@
             </div>
         </div>
         
-        <div id="settings-tab" class="tab-content">
+        <!-- Additional tabs for more specific configurations -->
+        <div id="model-routing-tab" class="tab-content">
             <div class="panel">
                 <div class="panel-header">Model Routing Configuration</div>
                 <div class="panel-content">
@@ -327,6 +329,23 @@
                             <button onclick="resetModelsFromServer()">Reset from Server</button>
                         </div>
                         <div id="models-list" style="max-height: 500px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="proxy-settings-tab" class="tab-content">
+            <div class="panel">
+                <div class="panel-header">Pure Proxy Configuration</div>
+                <div class="panel-content">
+                    <div id="pure-proxy-content">
+                        <div style="margin-top: 20px;">
+                            <h3>Model-Specific Target Configuration</h3>
+                            <p>Configure which __proxy__ model should be redirected to other models in Model Routing:</p>
+                            <div id="model-target-config" style="max-height: 500px; overflow-y: auto;">
+                                <p>Loading model configurations...</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -796,23 +815,38 @@
                            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px;">`;
                 
                 models.forEach(model => {
+                    // Check if this model comes from the /__proxy__ endpoint
+                    const isFromProxyEndpoint = model.source_endpoint === '/__proxy__';
+                    
                     html += `<div style="border: 1px solid #eee; border-radius: 4px; padding: 10px; background: #fafafa;">
                                <div><strong>${model.id}</strong></div>
-                               <div style="font-size: 0.8em; color: #666;">Owned by: ${model.owned_by || 'unknown'}</div>
-                               <div style="margin-top: 8px;">
-                                 <label>Route to:</label>
-                                 <select onchange="changeModelRoute('${model.id}', this.value)" style="width: 100%; padding: 5px; margin-top: 5px;">
-                                   <option value="">Default</option>`;
+                               <div style="font-size: 0.8em; color: #666;">Owned by: ${model.owned_by || 'unknown'}</div>`;
                     
-                    // Add all available endpoints as routing options
-                    allEndpoints.forEach(ep => {
-                        const selected = (model.current_route === ep.proxy_path_prefix) ? 'selected' : '';
-                        html += `<option value="${ep.proxy_path_prefix}" ${selected}>${ep.proxy_path_prefix} (${ep.target_base_url})</option>`;
-                    });
+                    // Only show "Route to" option for models that are not from the /__proxy__ endpoint
+                    if (!isFromProxyEndpoint) {
+                        html += `<div style="margin-top: 8px;">
+                                   <label>Route to:</label>
+                                   <select onchange="changeModelRoute('${model.id}', this.value)" style="width: 100%; padding: 5px; margin-top: 5px;">
+                                     <option value="">Default</option>`;
+                        
+                        // Add all available endpoints as routing options
+                        allEndpoints.forEach(ep => {
+                            // Only show endpoints that have target_base_url (not pure proxy endpoints)
+                            if (ep.target_base_url && ep.target_base_url.trim() !== "") {
+                                const selected = (model.current_route === ep.proxy_path_prefix) ? 'selected' : '';
+                                html += `<option value="${ep.proxy_path_prefix}" ${selected}>${ep.proxy_path_prefix} (${ep.target_base_url})</option>`;
+                            }
+                        });
+                        
+                        html += `</select>
+                               </div>`;
+                    } else {
+                        html += `<div style="margin-top: 8px; font-style: italic; color: #999;">
+                                   <small>Model from pure proxy endpoint - no routing options available</small>
+                                 </div>`;
+                    }
                     
-                    html += `</select>
-                           </div>
-                         </div>`;
+                    html += `</div>`;
                 });
                 
                 html += '</div></div>';
@@ -856,8 +890,8 @@
             // Activate selected tab button
             event.target.classList.add('active');
             
-            // If switching to settings tab, make sure models are loaded
-            if (tabName === 'settings') {
+            // If switching to settings tabs, make sure models are loaded
+            if (tabName === 'model-routing' || tabName === 'proxy-settings') {
                 refreshModels();
             }
         }
@@ -920,14 +954,31 @@
                 return;
             }
             
-            // Group models by their prefix (part before the first '/')
+            // Group models by their prefix using prefix_map
             const modelsByPrefix = {};
             allModelsData.models.forEach(model => {
-                // Extract prefix from model ID (part before first '/')
-                let prefix = 'unprefixed'; // Default for models without prefix
-                const parts = model.id.split('/');
-                if (parts.length > 1) {
-                    prefix = parts[0]; // Use the part before first slash as prefix
+                // Find the appropriate prefix based on prefix_map
+                let prefix = 'Other'; // Default for models without matching prefix
+                
+                // Check against prefix_map to find the correct prefix
+                const prefixMap = [
+                    ['grok', 'Grok'],
+                    ['deepseek', 'Deepseek'], 
+                    ['qwen3.5', 'Qwen'],
+                    ['qwen3', 'Qwen'],
+                    ['qwen', 'Qwen'],
+                    ['glm', 'GLM'],
+                    ['kimi', 'Kimi'],
+                    ['minimax', 'MiniMax'],
+                    ['doubao', 'Doubao']
+                ];
+                
+                const modelLower = model.id.toLowerCase();
+                for (const [pattern, prefixName] of prefixMap) {
+                    if (modelLower.includes(pattern)) {
+                        prefix = prefixName;
+                        break;
+                    }
                 }
                 
                 if (!modelsByPrefix[prefix]) {
@@ -975,13 +1026,52 @@
                                  <select id="redirect-select-${model.id}" style="width: 100%; padding: 5px; margin-top: 5px;">
                                    <option value="" ${!hasRedirect ? 'selected' : ''}>No redirect (use original)</option>`;
                     
-                    // Add all available models as redirect options (excluding itself)
+                    // Group models by prefix using the prefix_map configuration
+                    const modelsByPrefix = {};
                     allModelsData.models.forEach(otherModel => {
                         if (otherModel.id !== model.id) {
-                            const selected = hasRedirect && redirectValue === otherModel.id ? 'selected' : '';
-                            html += `<option value="${otherModel.id}" ${selected}>${otherModel.id}</option>`;
+                            // Find the appropriate prefix based on prefix_map
+                            let prefix = 'Other'; // Default for models without matching prefix
+                            
+                            // Check against prefix_map to find the correct prefix
+                            const prefixMap = [
+                                ['grok', 'Grok'],
+                                ['deepseek', 'Deepseek'], 
+                                ['qwen3.5', 'Qwen'],
+                                ['qwen3', 'Qwen'],
+                                ['qwen', 'Qwen'],
+                                ['glm', 'GLM'],
+                                ['kimi', 'Kimi'],
+                                ['minimax', 'MiniMax'],
+                                ['doubao', 'Doubao']
+                            ];
+                            
+                            const modelLower = otherModel.id.toLowerCase();
+                            for (const [pattern, prefixName] of prefixMap) {
+                                if (modelLower.includes(pattern)) {
+                                    prefix = prefixName;
+                                    break;
+                                }
+                            }
+                            
+                            if (!modelsByPrefix[prefix]) {
+                                modelsByPrefix[prefix] = [];
+                            }
+                            modelsByPrefix[prefix].push(otherModel);
                         }
                     });
+                    
+                    // Add grouped options
+                    for (const [prefix, models] of Object.entries(modelsByPrefix)) {
+                        html += `<optgroup label="${prefix}">`;
+                        // Sort models within each optgroup by ID
+                        models.sort((a, b) => a.id.localeCompare(b.id));
+                        models.forEach(otherModel => {
+                            const selected = hasRedirect && redirectValue === otherModel.id ? 'selected' : '';
+                            html += `<option value="${otherModel.id}" ${selected}>${otherModel.id}</option>`;
+                        });
+                        html += `</optgroup>`;
+                    }
                     
                     html += `</select>
                                <button onclick="setModelRedirect('${model.id}', document.getElementById('redirect-select-${model.id}').value)" 
@@ -998,12 +1088,15 @@
                     // First, get the available endpoints for this model
                     const availableEndpoints = model.available_endpoints || [model.source_endpoint];
                     allModelsData.endpoints.forEach(ep => {
-                        // Only include endpoints that are available for this model
-                        if (availableEndpoints.includes(ep.proxy_path_prefix)) {
-                            const isSourceEndpoint = (model.source_endpoint === ep.proxy_path_prefix);
-                            const displayName = isSourceEndpoint ? `${ep.proxy_path_prefix} (${ep.target_base_url}) *` : `${ep.proxy_path_prefix} (${ep.target_base_url})`;
-                            const selected = (model.current_route === ep.proxy_path_prefix) ? 'selected' : '';
-                            html += `<option value="${ep.proxy_path_prefix}" ${selected}>${displayName}</option>`;
+                        // Only include endpoints that have target_base_url (not pure proxy)
+                        if (ep.target_base_url && ep.target_base_url.trim() !== "") {
+                            // Only include endpoints that are available for this model
+                            if (availableEndpoints.includes(ep.proxy_path_prefix)) {
+                                const isSourceEndpoint = (model.source_endpoint === ep.proxy_path_prefix);
+                                const displayName = isSourceEndpoint ? `${ep.proxy_path_prefix} (${ep.target_base_url}) *` : `${ep.proxy_path_prefix} (${ep.target_base_url})`;
+                                const selected = (model.current_route === ep.proxy_path_prefix) ? 'selected' : '';
+                                html += `<option value="${ep.proxy_path_prefix}" ${selected}>${displayName}</option>`;
+                            }
                         }
                     });
                     
@@ -1041,7 +1134,162 @@
             
             // Render with current visibility settings
             renderModelsList();
+            
+            // Update pure proxy endpoints in the proxy settings tab
+            renderPureProxyEndpoints();
         });
+        
+        // Function to render pure proxy endpoints - now just render model target configuration
+        function renderPureProxyEndpoints() {
+            // Skip the removed section and directly render model target configuration
+            renderModelTargetConfig();
+        }
+        
+        // Function to render model target configuration
+        function renderModelTargetConfig() {
+            const container = document.getElementById('model-target-config');
+            if (!container) return;
+            
+            if (!allModelsData.models || allModelsData.models.length === 0) {
+                container.innerHTML = '<p>No models available for configuration</p>';
+                return;
+            }
+            
+            // Find models that belong to the __proxy__ endpoint
+            // First, find the __proxy__ endpoint configuration to get its models
+            const proxyEndpoint = allModelsData.endpoints.find(ep => ep.proxy_path_prefix === '/__proxy__');
+            if (!proxyEndpoint || !proxyEndpoint.models) {
+                container.innerHTML = '<p>No models configured for __proxy__ endpoint</p>';
+                return;
+            }
+            
+            const proxyModels = proxyEndpoint.models;
+            
+            let html = '<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); gap: 15px;">';
+            
+            // Create configuration for each __proxy__ model
+            proxyModels.forEach(modelName => {
+                // Find current redirect for this model
+                let currentRedirect = null;
+                if (allModelsData.redirects && allModelsData.redirects[modelName]) {
+                    currentRedirect = allModelsData.redirects[modelName];
+                } else {
+                    // Check case-insensitive match
+                    for (const [original, target] of Object.entries(allModelsData.redirects || {})) {
+                        if (original.toLowerCase() === modelName.toLowerCase()) {
+                            currentRedirect = target;
+                            break;
+                        }
+                    }
+                }
+                
+                html += `<div style="border: 1px solid #ddd; border-radius: 5px; padding: 10px; background: #fafafa;">
+                           <h4 style="margin-top: 0; color: #2196F3;">${modelName}</h4>
+                           <div style="max-height: 300px; overflow-y: auto;">
+                             <div style="margin-bottom: 10px; padding: 8px; background: white; border-radius: 3px;">
+                               <div style="font-size: 0.85em; color: #666; margin: 5px 0;">__proxy__ model to redirect</div>
+                               <label style="display: block; margin-top: 5px;">Redirect to another model:</label>
+                               <select id="target-model-${modelName}" style="width: 100%; padding: 5px; margin-bottom: 5px;">
+                                 <option value="" ${!currentRedirect ? 'selected' : ''}>-- No redirect (use original) --</option>`;
+                
+                // Group models by prefix using the prefix_map configuration
+                const modelsByPrefix = {};
+                allModelsData.models.forEach(otherModel => {
+                    // Don't include the same model as an option
+                    if (otherModel.id.toLowerCase() !== modelName.toLowerCase()) {
+                        // Find the appropriate prefix based on prefix_map
+                        let prefix = 'Other'; // Default for models without matching prefix
+                        
+                        // Check against prefix_map to find the correct prefix
+                        const prefixMap = [
+                            ['grok', 'Grok'],
+                            ['deepseek', 'Deepseek'], 
+                            ['qwen3.5', 'Qwen'],
+                            ['qwen3', 'Qwen'],
+                            ['qwen', 'Qwen'],
+                            ['glm', 'GLM'],
+                            ['kimi', 'Kimi'],
+                            ['minimax', 'MiniMax'],
+                            ['doubao', 'Doubao']
+                        ];
+                        
+                        const modelLower = otherModel.id.toLowerCase();
+                        for (const [pattern, prefixName] of prefixMap) {
+                            if (modelLower.includes(pattern)) {
+                                prefix = prefixName;
+                                break;
+                            }
+                        }
+                        
+                        if (!modelsByPrefix[prefix]) {
+                            modelsByPrefix[prefix] = [];
+                        }
+                        modelsByPrefix[prefix].push(otherModel);
+                    }
+                });
+                
+                // Add grouped options
+                for (const [prefix, models] of Object.entries(modelsByPrefix)) {
+                    html += `<optgroup label="${prefix}">`;
+                    // Sort models within each optgroup by ID
+                    models.sort((a, b) => a.id.localeCompare(b.id));
+                    models.forEach(otherModel => {
+                        const isSelected = currentRedirect && otherModel.id.toLowerCase() === currentRedirect.toLowerCase() ? 'selected' : '';
+                        html += `<option value="${otherModel.id}" ${isSelected}>${otherModel.id}</option>`;
+                    });
+                    html += `</optgroup>`;
+                }
+                
+                // Show current redirect status
+                const redirectStatus = currentRedirect ? `Currently redirects to: <strong>${currentRedirect}</strong>` : 'No redirect configured';
+                html += `</select>
+                               <div style="margin-top: 5px; font-size: 0.9em; color: #4CAF50;">${redirectStatus}</div>
+                               <button onclick="saveTargetModel('${modelName}', document.getElementById('target-model-${modelName}').value)"
+                                       style="width: 100%; padding: 5px; margin-top: 5px;">Save Redirect</button>
+                             </div>
+                           </div>
+                         </div>`;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+        
+        // Function to save target model configuration
+        function saveTargetModel(sourceModelId, targetModelName) {
+            console.log(`Saving target model for ${sourceModelId}: ${targetModelName}`);
+            
+            // Send the target model configuration to the server
+            socket.emit('save_target_model_config', {
+                source_model: sourceModelId,
+                target_model: targetModelName
+            });
+        }
+        
+        // Function to save fixed models for an endpoint
+        function saveFixedModels(endpointPrefix, fixedModelsText) {
+            console.log(`Saving fixed models for ${endpointPrefix}: ${fixedModelsText}`);
+            
+            // Split the text by newlines and filter out empty lines
+            const fixedModels = fixedModelsText.split('\n').filter(line => line.trim() !== '');
+            
+            // Send the fixed models configuration to the server
+            socket.emit('save_fixed_models_config', {
+                endpoint_prefix: endpointPrefix,
+                fixed_models: fixedModels
+            });
+        }
+        
+        // Function to save target model for an endpoint
+        function saveTargetModelForEndpoint(endpointPrefix, targetModel) {
+            console.log(`Saving target model for endpoint ${endpointPrefix}: ${targetModel}`);
+            
+            // Send the target model configuration for endpoint to the server
+            socket.emit('save_target_model_for_endpoint', {
+                endpoint_prefix: endpointPrefix,
+                target_model: targetModel
+            });
+        }
         
         // Initial request for models data
         if (socket.connected) {
