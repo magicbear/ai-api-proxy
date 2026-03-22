@@ -1,6 +1,21 @@
 {
   "endpoints": [
     {
+      "proxy_path_prefix": "/__proxy__",
+      "models": [
+        "Qwen3-122B",
+        "Qwen3-Coder",
+        "Nvidia-Nemotron3",
+        "Kimi",
+        "GLM",
+        "MiniMax",
+        "Grok",
+        "Gemini",
+        "Deepseek",
+        "Doubao"
+      ]
+    },
+    {
       "proxy_path_prefix": "/local-vllm",
       "target_base_url": "http://192.168.32.130:16666/",
       "api_key_header": "",
@@ -8,8 +23,15 @@
       "api_key_env": ""
     },
     {
-      "proxy_path_prefix": "/local-sgl",
+      "proxy_path_prefix": "/local-sgl2",
       "target_base_url": "http://192.168.32.5:16666/",
+      "api_key_header": "",
+      "api_key_prefix": "",
+      "api_key_env": ""
+    },
+    {
+      "proxy_path_prefix": "/local-sgl",
+      "target_base_url": "http://192.168.32.5:5000/",
       "api_key_header": "",
       "api_key_prefix": "",
       "api_key_env": ""
@@ -61,6 +83,17 @@
     }
   ],
   "port": 16900,
+  "prefix_map": [
+    ["grok", "Grok"],
+    ["deepseek", "Deepseek"], 
+    ["qwen3.5", "Qwen"],
+    ["qwen3", "Qwen"],
+    ["qwen", "Qwen"],
+    ["glm", "GLM"],
+    ["kimi", "Kimi"],
+    ["minimax", "MiniMax"],
+    ["doubao", "Doubao"]
+  ],
   "model_display_settings": {
     "grok-3": false,
     "grok-3-mini": false,
@@ -127,7 +160,8 @@
     "siliconflow/deepseek-v3.2": false,
     "siliconflow/deepseek-r1-0528": false,
     "siliconflow/deepseek-v3.1-terminus": false,
-    "siliconflow/deepseek-v3-0324": false
+    "siliconflow/deepseek-v3-0324": false,
+    "Qwen/qwen3-s2s-flash-realtime-2025-09-22": true
   },
   "model_routing_settings": {
     "qwen/qwen3.5-plus": "/bailian",
@@ -136,6 +170,8 @@
     "Qwen/qwen3.5-122b-a10b": "/local-sgl"
   },
   "model_redirects": {
-    "Qwen/Qwen3.5-9B": null
+    "Qwen/Qwen3.5-9B": null,
+    "Qwen/qwen3.5-122b-a10b": null,
+    "Qwen3-122B": "qwen3.5-122b-a10b"
   }
 }

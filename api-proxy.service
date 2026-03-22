@@ -4,10 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-User=magicbear
-Group=magicbear
 WorkingDirectory=/data/clawdata/dev/proj/api-proxy
-Environment=PATH=/home/magicbear/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /data/clawdata/dev/proj/api-proxy/proxy_server.py
 Restart=always

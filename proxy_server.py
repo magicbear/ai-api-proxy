@@ -192,17 +192,98 @@ class APIProxyServer:
             processed_subpath = processed_subpath[4:]
         
         # Determine target URL
-        target_base = endpoint_config['target_base_url']
+        target_base = endpoint_config.get('target_base_url', '')
         
         # Check if this is a models request and if static models are configured
         is_models_request = processed_subpath == 'models' or processed_subpath == 'v1/models'
         static_models = endpoint_config.get('static_models') or endpoint_config.get('models')
         
         if is_models_request and static_models:
+            # Add prefixes to static models for display
+            prefixed_static_models = []
+            for model in static_models:
+                if isinstance(model, str):
+                    # If it's a string, add prefix if needed
+                    if '/' not in model:
+                        # Check if the model name matches any known prefixes
+                        matched_prefix = get_model_prefix(model)
+                        if matched_prefix:
+                            prefixed_model = f"{matched_prefix}/{model}"
+                        else:
+                            # Use the source endpoint as a prefix if no specific prefix matches
+                            source_endpoint = endpoint_config.get('proxy_path_prefix', 'unknown')
+                            clean_prefix = source_endpoint.lstrip('/').replace('/', '-')
+                            prefixed_model = f"{clean_prefix}/{model}"
+                    else:
+                        prefixed_model = model  # Already has prefix
+                    prefixed_static_models.append(prefixed_model)
+                else:
+                    # If it's an object, add prefix to the id field if needed
+                    model_obj = model.copy()
+                    if 'id' in model_obj:
+                        model_id = model_obj['id']
+                        if '/' not in model_id:
+                            # Check if the model name matches any known prefixes
+                            matched_prefix = get_model_prefix(model_id)
+                            if matched_prefix:
+                                prefixed_model_id = f"{matched_prefix}/{model_id}"
+                            else:
+                                # Use the source endpoint as a prefix if no specific prefix matches
+                                source_endpoint = endpoint_config.get('proxy_path_prefix', 'unknown')
+                                clean_prefix = source_endpoint.lstrip('/').replace('/', '-')
+                                prefixed_model_id = f"{clean_prefix}/{model_id}"
+                            model_obj['id'] = prefixed_model_id
+                    prefixed_static_models.append(model_obj)
+            
             return jsonify({
                 "object": "list",
-                "data": static_models
+                "data": prefixed_static_models
             })
+        
+        # Check if this is a pure proxy endpoint without target_base_url
+        if not target_base or target_base.strip() == '':
+            # For pure proxy endpoints, we need to check if it's a models request
+            # If it's not a models request, we should check for model-specific redirects
+            if not is_models_request:
+                # For non-models requests on pure proxy endpoints, we should check if there are model-specific redirects
+                # First, get the model from the request data if it's a chat completion request
+                if req.is_json and ('/chat/completions' in req.full_path or '/v1/chat/completions' in req.full_path):
+                    try:
+                        json_data = req.get_json()
+                        if json_data and 'model' in json_data:
+                            original_model = json_data['model']
+                            
+                            # Check if there's a redirect for this model
+                            redirect_target = check_model_redirect_for_pure_proxy(original_model)
+                            
+                            if redirect_target:
+                                # Redirect the request to the aggregated endpoint which will handle routing
+                                # This allows the model to be handled by the appropriate backend
+                                logger.info(f"Redirecting model {original_model} to {redirect_target}")
+                                # Update the model in the request data
+                                json_data['model'] = redirect_target
+                                # Update the request data
+                                data = json.dumps(json_data).encode('utf-8')
+                                # Continue with the aggregated endpoint logic
+                                # We'll handle this by calling the aggregated chat completions handler
+                                request._cached_json = (True, json_data)  # Update request's cached JSON
+                                # Now we need to route this to the appropriate backend based on the redirected model
+                                # This requires a bit of manipulation to call the aggregated handler
+                                # Instead, let's update the model and continue with the standard flow
+                                # but note that this endpoint has no target_base_url, so we'll need to return an error
+                                pass
+                    except Exception as e:
+                        logger.error(f"Error checking model redirect: {e}")
+                
+                # Return error for non-models requests on pure proxy endpoints without target
+                return jsonify({
+                    "error": "Pure proxy endpoint requires model-specific routing or target forwarding configuration",
+                    "endpoint": endpoint_config['proxy_path_prefix'],
+                    "configured_models": static_models or []
+                }), 400
+            else:
+                # This is a models request, which is handled above
+                pass
         
         # Only add 'v1/' prefix for specific OpenAI-compatible API endpoints
         if processed_subpath:
@@ -600,7 +681,7 @@ class APIProxyServer:
         
         # Run the Flask-SocketIO app
         # Use threading mode for better concurrency
-        socketio.run(app, host=host, port=self.port, debug=False, use_reloader=False)
+        socketio.run(app, host=host, port=self.port, debug=False, use_reloader=False, allow_unsafe_werkzeug=True)
 
 # Cache expiration time in seconds (set to 0 for permanent cache)
 MODEL_CACHE_EXPIRATION = 0
@@ -670,17 +751,8 @@ def fetch_all_models(refresh=True):
                         model_obj = model
                     
                     if model_id:
-                        # Generate prefixed model ID if it doesn't have one
-                        prefixed_model_id = model_id
-                        if '/' not in model_id:
-                            matched_prefix = get_model_prefix(model_id)
-                            if matched_prefix:
-                                prefixed_model_id = f"{matched_prefix}/{model_id}"
-                            else:
-                                clean_prefix = proxy_prefix.lstrip('/').replace('/', '-')
-                                prefixed_model_id = f"{clean_prefix}/{model_id}"
-                        
-                        final_model_id = prefixed_model_id
+                        # Store the original model ID without any prefix modification
+                        final_model_id = model_id
                         
                         # Check if this original model already exists
                         original_already_exists = False
@@ -758,17 +830,8 @@ def fetch_all_models(refresh=True):
                         for model in data['data']:
                             model_id = model.get('id')
                             if model_id:
-                                # Generate prefixed model ID if it doesn't have one
-                                prefixed_model_id = model_id
-                                if '/' not in model_id:
-                                    matched_prefix = get_model_prefix(model_id)
-                                    if matched_prefix:
-                                        prefixed_model_id = f"{matched_prefix}/{model_id}"
-                                    else:
-                                        clean_prefix = proxy_prefix.lstrip('/').replace('/', '-')
-                                        prefixed_model_id = f"{clean_prefix}/{model_id}"
-                                
-                                final_model_id = prefixed_model_id
+                                # Store the original model ID without any prefix modification
+                                final_model_id = model_id
                                 
                                 # Check if this original model already exists
                                 original_already_exists = False
@@ -869,9 +932,33 @@ def aggregated_models():
         model for model in current_cached_models.values() 
         if model.get('is_displayed', True)  # Default to True if not set
     ]
+    
+    # Add prefixes to model IDs for display in the aggregated models list
+    prefixed_models = []
+    for model in displayed_models:
+        # Create a copy of the model to avoid modifying the cached version
+        model_copy = model.copy()
+        
+        # Add prefix to the model ID for display purposes
+        model_id = model_copy['id']
+        if '/' not in model_id:
+            # Check if the model name matches any known prefixes
+            matched_prefix = get_model_prefix(model_id)
+            if matched_prefix:
+                prefixed_id = f"{matched_prefix}/{model_id}"
+            else:
+                # Use the source endpoint as a prefix if no specific prefix matches
+                source_endpoint = model_copy.get('source_endpoint', 'unknown')
+                clean_prefix = source_endpoint.lstrip('/').replace('/', '-')
+                prefixed_id = f"{clean_prefix}/{model_id}"
+            
+            model_copy['id'] = prefixed_id
+        
+        prefixed_models.append(model_copy)
+    
     return jsonify({
         "object": "list",
-        "data": displayed_models
+        "data": prefixed_models
     })
 
 
@@ -907,6 +994,26 @@ def aggregated_chat_completions():
                     logger.info(f"Case-insensitive redirect match: {requested_model_id} -> {redirected_to}")
                     final_model_name = redirected_to
                     break
+            else:
+                # If no direct match, try removing prefix and matching
+                # Extract model name without prefix (part after the last '/')
+                if '/' in requested_model_id:
+                    bare_model_name = requested_model_id.split('/')[-1]
+                    bare_model_lower = bare_model_name.lower()
+                    
+                    # Try matching the bare model name
+                    for original, target in model_redirects.items():
+                        original_bare = original.split('/')[-1] if '/' in original else original
+                        if original_bare.lower() == bare_model_lower:
+                            redirected_to = target
+                            logger.info(f"Bare name redirect match: {requested_model_id} ({bare_model_name}) -> {redirected_to}")
+                            final_model_name = redirected_to
+                            break
+                        elif original.lower() == bare_model_lower:
+                            redirected_to = target
+                            logger.info(f"Bare name redirect match (original without prefix): {requested_model_id} ({bare_model_name}) -> {redirected_to}")
+                            final_model_name = redirected_to
+                            break
         
         # Now determine the backend model name (original_id from cache)
         backend_model_name = final_model_name  # Default to final_model_name if not in cache
@@ -936,6 +1043,20 @@ def aggregated_chat_completions():
                         backend_model_name = cached_model.get('original_id', cached_id)
                         logger.info(f"Found via case-insensitive match: {final_model_name} -> {routing_model_id} -> {backend_model_name}")
                         break
+                else:
+                    # If still no match, try removing prefix from the requested model name
+                    if '/' in final_model_name:
+                        bare_model_name = final_model_name.split('/')[-1]
+                        bare_model_lower = bare_model_name.lower()
+                        
+                        # Look for the bare name in cache
+                        for cached_id, cached_model in cached_models.items():
+                            cached_bare = cached_id.split('/')[-1] if '/' in cached_id else cached_id
+                            if cached_bare.lower() == bare_model_lower or cached_model.get('original_id', '').split('/')[-1].lower() == bare_model_lower:
+                                routing_model_id = cached_id
+                                backend_model_name = cached_model.get('original_id', cached_id)
+                                logger.info(f"Found via bare name match: {final_model_name} ({bare_model_name}) -> {routing_model_id} -> {backend_model_name}")
+                                break
         
         logger.info(f"Model processing: {requested_model_id} -> {final_model_name} -> {backend_model_name}")
         
@@ -1034,7 +1155,16 @@ def handle_aggregated_request(flask_request, endpoint_config):
         logger.error(f"Failed to emit connection_added event: {e}")
     
     # Determine target URL - for aggregated, we're calling v1/chat/completions on the target
-    target_base = endpoint_config['target_base_url']
+    target_base = endpoint_config.get('target_base_url', '')
+    
+    # Check if this is a pure proxy endpoint without target_base_url
+    if not target_base or target_base.strip() == '':
+        # For pure proxy endpoints, we cannot forward to a target
+        return jsonify({
+            "error": "Cannot process chat completion request on pure proxy endpoint without target",
+            "endpoint": endpoint_config['proxy_path_prefix']
+        }), 400
+    
     target_url = urljoin(target_base, 'v1/chat/completions')
     
     # Prepare headers
@@ -1572,6 +1702,171 @@ def handle_set_model_redirect(data):
         emit('error', {'message': 'Both original and target models must be specified'})
 
 
+# NEW: Socket.IO event handler for saving target model configuration
+@socketio.on('save_target_model_config')
+def handle_save_target_model_config(data):
+    """Save target model configuration from UI. This handles all model redirects, including those for pure proxy models."""
+    from flask_socketio import emit
+    source_model = data.get('source_model')
+    target_model = data.get('target_model')
+    
+    if source_model:
+        # Save as a model redirect in the standard model_redirects section
+        # This combines both regular model redirects and pure proxy model redirects
+        set_model_redirect(source_model, target_model)
+        
+        # Update the cached model
+        if source_model in cached_models:
+            cached_models[source_model]['target_model'] = target_model
+        
+        # Send confirmation back to client
+        emit('models_updated', {
+            'models': list(cached_models.values()),
+            'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
+            'redirects': model_redirects,
+            'message': f'Target model configuration saved: {source_model} -> {target_model}'
+        })
+    else:
+        emit('error', {'message': 'Source model must be specified'})
+
+
+# NEW: Socket.IO event handler for saving fixed models configuration
+@socketio.on('save_fixed_models_config')
+def handle_save_fixed_models_config(data):
+    """Save fixed models configuration for an endpoint from UI."""
+    from flask_socketio import emit
+    endpoint_prefix = data.get('endpoint_prefix')
+    fixed_models = data.get('fixed_models', [])
+    
+    if endpoint_prefix:
+        # Save the fixed models configuration
+        save_fixed_models_config(endpoint_prefix, fixed_models)
+        
+        # Update the endpoint configuration
+        for i, endpoint in enumerate(proxy_server.endpoints):
+            if endpoint['proxy_path_prefix'] == endpoint_prefix:
+                proxy_server.endpoints[i]['models'] = fixed_models
+                # Update the main config as well
+                proxy_server.config['endpoints'][i]['models'] = fixed_models
+                break
+        
+        # Refresh models cache
+        fetch_all_models(refresh=True)
+        
+        # Send confirmation back to client
+        emit('models_updated', {
+            'models': list(cached_models.values()),
+            'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
+            'redirects': model_redirects,
+            'message': f'Fixed models configuration saved for {endpoint_prefix}: {len(fixed_models)} models'
+        })
+    else:
+        emit('error', {'message': 'Endpoint prefix must be specified'})
+
+
+# NEW: Socket.IO event handler for saving target model for endpoint
+@socketio.on('save_target_model_for_endpoint')
+def handle_save_target_model_for_endpoint(data):
+    """Save target model configuration for an endpoint from UI."""
+    from flask_socketio import emit
+    endpoint_prefix = data.get('endpoint_prefix')
+    target_model = data.get('target_model')
+    
+    if endpoint_prefix and target_model:
+        # Save the target model configuration for endpoint
+        save_target_model_for_endpoint(endpoint_prefix, target_model)
+        
+        # Send confirmation back to client
+        emit('models_updated', {
+            'models': list(cached_models.values()),
+            'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
+            'redirects': model_redirects,
+            'message': f'Target model for endpoint {endpoint_prefix} set to: {target_model}'
+        })
+    else:
+        emit('error', {'message': 'Both endpoint prefix and target model must be specified'})
+
+
+def save_fixed_models_config(endpoint_prefix, fixed_models):
+    """Save fixed models configuration for an endpoint to the proxy config file."""
+    try:
+        # Load existing config
+        with open('./proxy_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Update the endpoint with fixed models
+        for endpoint in config['endpoints']:
+            if endpoint['proxy_path_prefix'] == endpoint_prefix:
+                endpoint['models'] = fixed_models
+                break
+        
+        # Write back to file
+        with open('./proxy_config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Fixed models configuration saved for {endpoint_prefix}: {fixed_models}")
+    except Exception as e:
+        import traceback
+        logger.error(f"Error saving fixed models configuration: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+def save_target_model_for_endpoint(endpoint_prefix, target_model):
+    """Save target model configuration for an endpoint to the proxy config file."""
+    try:
+        # Load existing config
+        with open('./proxy_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Create endpoint_target_configs section if it doesn't exist
+        if 'endpoint_target_configs' not in config:
+            config['endpoint_target_configs'] = {}
+        
+        # Add the target model configuration for the endpoint
+        config['endpoint_target_configs'][endpoint_prefix] = target_model
+        
+        # Write back to file
+        with open('./proxy_config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Target model configuration saved for endpoint {endpoint_prefix}: {target_model}")
+    except Exception as e:
+        import traceback
+        logger.error(f"Error saving target model configuration for endpoint: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+def load_endpoint_target_configs():
+    """Load endpoint target model configurations from the proxy config file."""
+    try:
+        # Load existing config
+        with open('./proxy_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Load endpoint target configs if they exist
+        if 'endpoint_target_configs' in config:
+            endpoint_targets = config['endpoint_target_configs']
+            logger.info(f"Loaded {len(endpoint_targets)} endpoint target configurations from config")
+        else:
+            logger.info("No endpoint target configurations found in config")
+    except Exception as e:
+        import traceback
+        logger.error(f"Error loading endpoint target configurations: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+def check_model_redirect_for_pure_proxy(model_name):
+    """Check if a model on the pure proxy endpoint has a redirect configured."""
+    # Since all redirects are now in model_redirects, we just need to check there
+    # Look for case-insensitive match in the global model_redirects
+    model_lower = model_name.lower()
+    for source_model, target_model in model_redirects.items():
+        if source_model.lower() == model_lower:
+            return target_model
+    
+    return None
+
+
 def get_model_prefix(model_name):
     """
     Match model name to known prefixes based on the provided list:
@@ -1579,24 +1874,52 @@ def get_model_prefix(model_name):
     """
     model_name_lower = model_name.lower()
     
-    # Define prefix mappings
-    prefix_map = [
-        ('grok', 'Grok'),
-        ('deepseek', 'Deepseek'), 
-        ('qwen3.5', 'Qwen'),
-        ('qwen3', 'Qwen'),
-        ('qwen', 'Qwen'),
-        ('glm', 'GLM'),
-        ('kimi', 'Kimi'),
-        ('minimax', 'MiniMax'),
-        ('doubao', 'Doubao')
-    ]
+    # Get prefix mappings from config
+    prefix_map = get_prefix_map_from_config()
     
     for pattern, prefix in prefix_map:
         if pattern in model_name_lower:
             return prefix
     
     return None
+
+
+def get_prefix_map_from_config():
+    """Get prefix map from config file, with fallback to default."""
+    try:
+        with open('./proxy_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Check if prefix_map exists in the config
+        if 'prefix_map' in config:
+            return config['prefix_map']
+        else:
+            # Return default prefix map if not found in config
+            return [
+                ['grok', 'Grok'],
+                ['deepseek', 'Deepseek'], 
+                ['qwen3.5', 'Qwen'],
+                ['qwen3', 'Qwen'],
+                ['qwen', 'Qwen'],
+                ['glm', 'GLM'],
+                ['kimi', 'Kimi'],
+                ['minimax', 'MiniMax'],
+                ['doubao', 'Doubao']
+            ]
+    except Exception as e:
+        logger.error(f"Error loading prefix map from config: {e}")
+        # Return default if there's an error
+        return [
+            ['grok', 'Grok'],
+            ['deepseek', 'Deepseek'], 
+            ['qwen3.5', 'Qwen'],
+            ['qwen3', 'Qwen'],
+            ['qwen', 'Qwen'],
+            ['glm', 'GLM'],
+            ['kimi', 'Kimi'],
+            ['minimax', 'MiniMax'],
+            ['doubao', 'Doubao']
+        ]
 
 
 def fetch_models_from_provider(provider_endpoint):
@@ -1638,16 +1961,8 @@ def fetch_models_from_provider(provider_endpoint):
                             model_obj = model
                         
                         if model_id:
-                            # Generate prefixed model ID if it doesn't have one
-                            prefixed_model_id = model_id
-                            if '/' not in model_id:
-                                # Create a prefix based on the proxy path (without leading slash and slashes replaced with hyphens)
-                                clean_prefix = proxy_prefix.lstrip('/').replace('/', '-')
-                                prefixed_model_id = f"{clean_prefix}/{model_id}"
-                            
-                            # Handle models from different providers - combine same-named models under one entry
-                            # but track which endpoints provide each model
-                            final_model_id = prefixed_model_id
+                            # Store the original model ID without any prefix modification
+                            final_model_id = model_id
                             
                             # Check if this original model name already exists in our collection
                             original_exists = False
@@ -1736,16 +2051,8 @@ def fetch_models_from_provider(provider_endpoint):
                             for model in data['data']:
                                 model_id = model.get('id')
                                 if model_id:
-                                    # Generate prefixed model ID if it doesn't have one
-                                    prefixed_model_id = model_id
-                                    if '/' not in model_id:
-                                        # Create a prefix based on the proxy path (without leading slash and slashes replaced with hyphens)
-                                        clean_prefix = proxy_prefix.lstrip('/').replace('/', '-')
-                                        prefixed_model_id = f"{clean_prefix}/{model_id}"
-                                    
-                                    # Handle models from different providers - combine same-named models under one entry
-                                    # but track which endpoints provide each model
-                                    final_model_id = prefixed_model_id
+                                    # Store the original model ID without any prefix modification
+                                    final_model_id = model_id
                                     
                                     # Check if this original model name already exists in our collection
                                     original_exists = False
@@ -1941,15 +2248,67 @@ def set_model_redirect(original_model, target_model):
         cached_models[original_model]['redirect_to'] = target_model
 
 
+def save_target_model_config(source_model, target_model):
+    """Save target model configuration to the proxy config file."""
+    try:
+        # Load existing config
+        with open('./proxy_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Create target_model_configs section if it doesn't exist
+        if 'target_model_configs' not in config:
+            config['target_model_configs'] = {}
+        
+        # Add the target model configuration
+        config['target_model_configs'][source_model] = target_model
+        
+        # Write back to file
+        with open('./proxy_config.json', 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"Target model configuration saved: {source_model} -> {target_model}")
+    except Exception as e:
+        import traceback
+        logger.error(f"Error saving target model configuration: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+def load_target_model_configs():
+    """Load target model configurations from the proxy config file."""
+    global cached_models
+    try:
+        # Load existing config
+        with open('./proxy_config.json', 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Load target model configs if they exist
+        if 'target_model_configs' in config:
+            target_configs = config['target_model_configs']
+            logger.info(f"Loaded {len(target_configs)} target model configurations from config")
+            
+            # Update cached models with target configurations
+            for source_model, target_model in target_configs.items():
+                if source_model in cached_models:
+                    cached_models[source_model]['target_model'] = target_model
+        else:
+            logger.info("No target model configurations found in config")
+    except Exception as e:
+        import traceback
+        logger.error(f"Error loading target model configurations: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+
+
 if __name__ == '__main__':
     proxy_server = APIProxyServer('./proxy_config.json')
     # Store the instance in the global variable so the aggregated endpoint can access it
     globals()['proxy_server_instance'] = proxy_server
     
-    # Load model display, routing, and redirect settings from config
+    # Load model display, routing, redirect, and target model settings from config
     load_model_display_settings()
     load_model_routing_settings()
     load_model_redirects()  # NEW: Load model redirects
+    load_target_model_configs()  # NEW: Load target model configurations
+    load_endpoint_target_configs()  # NEW: Load endpoint target configurations
     
     # Fetch all models on startup
     fetch_all_models()

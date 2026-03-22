@@ -1,0 +1,317 @@
+# General Settings
+mixed-port: 7890
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+
+# Tun Settings
+tun:
+  enable: true
+  stack: system
+  auto-route: true
+  auto-detect-interface: true
+  dns-hijack:
+    - 192.168.8.0/24
+    - 192.168.10.0/24
+
+# DNSS Settings
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - localhost.ptlogin2.qq.com
+  nameserver:
+    - 114.114.114.114
+    - 8.8.8.8
+  fallback:
+    - 8.8.8.8
+    - 8.8.4.4
+  fallback-filter:
+    geosite: cn
+    ipcidr:
+      - 240.0.0.0/4
+    domain:
+      - "+.google.com"
+      - "+.facebook.com"
+      - "+.youtube.com"
+
+# Proxies
+proxies:
+  - name: "ypss-dns"
+    type: "shadowsocks"
+    server: "ypss.bilibili.co"
+    port: 442
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+
+  - name: "ss-hk"
+    type: "shadowsocks"
+    server: "103.151.151.7"
+    port: 8443
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+    udp: true
+    health-check:
+      enable: true
+      url: "http://192.168.11.6/"
+      interval: 300
+
+  - name: "ss-dj"
+    type: "shadowsocks"
+    server: "hp-dj.tvt.im"
+    port: 442
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    udp: true
+    health-check:
+      enable: true
+      url: "http://192.168.11.6/"
+      interval: 300
+
+  - name: "ss-dj-tel"
+    type: "shadowsocks"
+    server: "hp-dj-tel.tvt.im"
+    port: 442
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    udp: true
+    health-check:
+      enable: true
+      url: "http://192.168.11.6/"
+      interval: 300
+
+  - name: "tun-ns"
+    type: "shadowsocks"
+    server: "gate.tvt.im"
+    port: 51049
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+    health-check:
+      enable: true
+      url: "http://192.168.49.2:433/"
+      interval: 300
+
+  - name: "tun-nng"
+    type: "shadowsocks"
+    server: "gate.tvt.im"
+    port: 51050
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    health-check:
+      enable: true
+      url: "http://192.168.50.2:433/"
+      interval: 300
+
+  - name: "nng"
+    type: "shadowsocks"
+    server: "hp-nng.tvt.im"
+    port: 446
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+    health-check:
+      enable: true
+      url: "http://192.168.50.2:433/"
+      interval: 300
+
+  - name: "tun-jp"
+    type: "shadowsocks"
+    server: "gate.tvt.im"
+    port: 51048
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+    health-check:
+      enable: true
+      url: "http://192.168.48.2:433/"
+      interval: 300
+
+  - name: "jp"
+    type: "shadowsocks"
+    server: "hp-dj.tvt.im"
+    port: 446
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+    health-check:
+      enable: true
+      url: "http://192.168.48.2:433/"
+      interval: 300
+
+  - name: "ss-dj-jp"
+    type: "shadowsocks"
+    server: "hp-dj.tvt.im"
+    port: 448
+    cipher: "aes-256-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+    health-check:
+      enable: true
+      url: "http://192.168.48.2:433/"
+      interval: 300
+
+  - name: "home"
+    type: "shadowsocks"
+    server: "homepanel-cn.tvt.im"
+    port: 8442
+    cipher: "aes-128-cfb"
+    password: "pfuWStczeQ2Kmwk"
+    plugin: "obfs"
+    plugin-opts:
+      mode: "tls"
+      host: "example.com"
+
+# Proxy Groups
+proxy-groups:
+  - name: "Proxy"
+    type: "select"
+    proxies:
+      - "ypss-dns"
+      - "ss-dj"
+      - "ss-dj-tel"
+      - "ss-hk"
+      - "DIRECT"
+
+  - name: "Proxy-dj"
+    type: "select"
+    proxies:
+      - "Proxy"
+      - "ss-dj"
+      - "ss-dj-tel"
+      - "ss-hk"
+      - "DIRECT"
+
+  - name: "Proxy-nng"
+    type: "select"
+    proxies:
+      - "nng"
+      - "tun-nng"
+      - "Proxy"
+      - "DIRECT"
+
+  - name: "Proxy-ns"
+    type: "select"
+    proxies:
+      - "tun-ns"
+      - "Proxy"
+      - "DIRECT"
+
+  - name: "Proxy-home"
+    type: "select"
+    proxies:
+      - "Proxy"
+      - "home"
+      - "DIRECT"
+
+  - name: "Proxy-jp"
+    type: "select"
+    proxies:
+      - "ss-dj-jp"
+      - "tun-jp"
+      - "jp"
+      - "Proxy"
+      - "DIRECT"
+
+# Rules
+rules:
+  - IP-CIDR,10.23.202.102/32,Proxy
+  - IP-CIDR,10.23.194.202/32,Proxy
+  - IP-CIDR,10.127.0.0/16,Proxy
+  - DOMAIN,homepanel.loli.im,Proxy
+  - DOMAIN-SUFFIX,biliapi.net,Proxy
+  - DOMAIN,s1.m-b.cc,Proxy
+  - DOMAIN-KEYWORD,ali,DIRECT
+  - DOMAIN-KEYWORD,taobao,DIRECT
+  - DOMAIN,weixin.qq.com,DIRECT
+  - DOMAIN-KEYWORD,weibo,DIRECT
+  - DOMAIN-KEYWORD,didi,DIRECT
+  - DOMAIN,ele.me,DIRECT
+  - DOMAIN,elemecdn.com,DIRECT
+  - DOMAIN,baby.360.cn,DIRECT
+  - DOMAIN,jianshuapi.com,DIRECT
+  - DOMAIN-KEYWORD,live.com,DIRECT
+  - DOMAIN-KEYWORD,ele.me,DIRECT
+  - DOMAIN-SUFFIX,cn,DIRECT
+  - DOMAIN-SUFFIX,qq.com,DIRECT
+  - DOMAIN-SUFFIX,jd.com,DIRECT
+  - DOMAIN-SUFFIX,163.com,DIRECT
+  - DOMAIN-SUFFIX,126.net,DIRECT
+  - DOMAIN-SUFFIX,netease.com,DIRECT
+  - DOMAIN-SUFFIX,gtimg.com,DIRECT
+  - DOMAIN-KEYWORD,tietuku,DIRECT
+  - DOMAIN-KEYWORD,baidu,DIRECT
+  - DOMAIN-KEYWORD,360,DIRECT
+  - DOMAIN-KEYWORD,sina,DIRECT
+  - DOMAIN-KEYWORD,acgvideo,DIRECT
+  - DOMAIN-SUFFIX,ls.apple.com,DIRECT
+  - DOMAIN-SUFFIX,itunes.apple.com,DIRECT
+  - DOMAIN-SUFFIX,dl.google.com,DIRECT
+  - DOMAIN-KEYWORD,sohu,DIRECT
+  - DOMAIN-KEYWORD,qiyi,DIRECT
+  - DOMAIN-SUFFIX,apple.com,Proxy
+  - DOMAIN-SUFFIX,icloud.com,Proxy
+  - DOMAIN-SUFFIX,mzstatic.com,Proxy
+  - DOMAIN-SUFFIX,medium.com,Proxy
+  - DOMAIN-SUFFIX,gigafile.nu,Proxy
+  - DOMAIN-SUFFIX,blackmagicdesign.com,Proxy
+  - DOMAIN-SUFFIX,radioaficion.com,Proxy
+  - DOMAIN-SUFFIX,bilibili.it,Proxy
+  - DOMAIN-SUFFIX,bilibili.co,Proxy
+  - DOMAIN-SUFFIX,biliintl.co,Proxy
+  - DOMAIN-KEYWORD,instagram,Proxy
+  - IP-CIDR,91.108.56.0/22,Proxy
+  - IP-CIDR,91.108.4.0/22,Proxy
+  - IP-CIDR,109.239.140.0/24,Proxy
+  - IP-CIDR,149.154.160.0/20,Proxy
+  - IP-CIDR,172.18.0.0/16,Proxy
+  - IP-CIDR,192.168.9.0/24,Proxy-home
+  - IP-CIDR,192.168.10.0/24,Proxy-home
+  - IP-CIDR,192.168.11.0/24,Proxy-dj
+  - IP-CIDR,192.168.12.0/23,Proxy-dj
+  - IP-CIDR,192.168.14.0/23,Proxy-dj
+  - IP-CIDR,192.168.16.0/21,Proxy-dj
+  - IP-CIDR,192.168.24.0/22,Proxy-dj
+  - IP-CIDR,192.168.28.0/23,Proxy-dj
+  - IP-CIDR,192.168.48.0/24,Proxy-jp
+  - IP-CIDR,192.168.49.0/24,Proxy-ns
+  - IP-CIDR,192.168.50.0/24,Proxy-nng
+  - IP-CIDR,172.16.0.0/24,Proxy
+  - IP-CIDR,192.168.0.0/18,DIRECT
+  - IP-CIDR,10.23.0.0/16,Proxy
+  - IP-CIDR,172.17.0.0/16,Proxy
+  - IP-CIDR,172.18.0.0/16,Proxy
+  - IP-CIDR,172.19.0.0/16,Proxy
+  - IP-CIDR,172.20.0.0/14,Proxy
+  - IP-CIDR,172.24.0.0/13,Proxy
+  - IP-CIDR,127.0.0.0/8,DIRECT
+  - IP-CIDR,100.64.0.0/10,DIRECT
+  - GEOIP,CN,DIRECT
+  - MATCH,Proxy
