@@ -1169,16 +1169,28 @@
             
             // Create configuration for each __proxy__ model
             proxyModels.forEach(modelName => {
-                // Find current redirect for this model
+                // Find current redirect for this model - look in the cached models data
                 let currentRedirect = null;
-                if (allModelsData.redirects && allModelsData.redirects[modelName]) {
-                    currentRedirect = allModelsData.redirects[modelName];
-                } else {
-                    // Check case-insensitive match
-                    for (const [original, target] of Object.entries(allModelsData.redirects || {})) {
-                        if (original.toLowerCase() === modelName.toLowerCase()) {
-                            currentRedirect = target;
-                            break;
+                
+                // First check if the model itself has redirect info in cached models
+                for (const model of allModelsData.models) {
+                    if (model.id.toLowerCase() === modelName.toLowerCase() && model.redirect_to !== undefined) {
+                        currentRedirect = model.redirect_to;
+                        break;
+                    }
+                }
+                
+                // If not found in cached models, check the redirects object
+                if (!currentRedirect && allModelsData.redirects) {
+                    if (allModelsData.redirects[modelName]) {
+                        currentRedirect = allModelsData.redirects[modelName];
+                    } else {
+                        // Check case-insensitive match in redirects
+                        for (const [original, target] of Object.entries(allModelsData.redirects)) {
+                            if (original.toLowerCase() === modelName.toLowerCase()) {
+                                currentRedirect = target;
+                                break;
+                            }
                         }
                     }
                 }
