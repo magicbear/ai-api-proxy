@@ -199,28 +199,54 @@ class APIProxyServer:
         static_models = endpoint_config.get('static_models') or endpoint_config.get('models')
         
         if is_models_request and static_models:
-            # Add prefixes to static models for display
+            # Add prefixes to static models for display, ensuring OpenAI-compatible format
             prefixed_static_models = []
             for model in static_models:
                 if isinstance(model, str):
-                    # If it's a string, add prefix if needed
-                    if '/' not in model:
+                    # If it's a string, add prefix if needed and convert to OpenAI format
+                    model_id = model
+                    if '/' not in model_id:
                         # Check if the model name matches any known prefixes
-                        matched_prefix = get_model_prefix(model)
+                        matched_prefix = get_model_prefix(model_id)
                         if matched_prefix:
-                            prefixed_model = f"{matched_prefix}/{model}"
+                            prefixed_model_id = f"{matched_prefix}/{model_id}"
                         else:
                             # Use the source endpoint as a prefix if no specific prefix matches
                             source_endpoint = endpoint_config.get('proxy_path_prefix', 'unknown')
                             clean_prefix = source_endpoint.lstrip('/').replace('/', '-')
-                            prefixed_model = f"{clean_prefix}/{model}"
+                            prefixed_model_id = f"{clean_prefix}/{model_id}"
                     else:
-                        prefixed_model = model  # Already has prefix
-                    prefixed_static_models.append(prefixed_model)
+                        prefixed_model_id = model_id  # Already has prefix
+                    
+                    # Create OpenAI-compatible model object
+                    model_obj = {
+                        "id": prefixed_model_id,
+                        "object": "model",
+                        "created": int(time.time()),
+                        "owned_by": "organization-owner"  # Standard OpenAI format
+                    }
+                    prefixed_static_models.append(model_obj)
                 else:
-                    # If it's an object, add prefix to the id field if needed
+                    # If it's already an object, ensure it follows OpenAI format
                     model_obj = model.copy()
-                    if 'id' in model_obj:
+                    if 'id' not in model_obj:
+                        # If no id field, treat the whole thing as an id
+                        model_obj = {
+                            "id": str(model),
+                            "object": "model",
+                            "created": int(time.time()),
+                            "owned_by": "organization-owner"
+                        }
+                    else:
+                        # Ensure required OpenAI fields are present
+                        if 'object' not in model_obj:
+                            model_obj['object'] = 'model'
+                        if 'created' not in model_obj:
+                            model_obj['created'] = int(time.time())
+                        if 'owned_by' not in model_obj:
+                            model_obj['owned_by'] = 'organization-owner'
+                        
+                        # Add prefix to the id field if needed
                         model_id = model_obj['id']
                         if '/' not in model_id:
                             # Check if the model name matches any known prefixes
@@ -233,6 +259,7 @@ class APIProxyServer:
                                 clean_prefix = source_endpoint.lstrip('/').replace('/', '-')
                                 prefixed_model_id = f"{clean_prefix}/{model_id}"
                             model_obj['id'] = prefixed_model_id
+                    
                     prefixed_static_models.append(model_obj)
             
             return jsonify({
