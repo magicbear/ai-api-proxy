@@ -314,7 +314,7 @@ class APIProxyServer:
         
         # Only add 'v1/' prefix for specific OpenAI-compatible API endpoints
         if processed_subpath:
-            if any(keyword in processed_subpath.lower() for keyword in ['chat', 'completions', 'embeddings', 'images', 'audio', 'moderations']):
+            if any(keyword in processed_subpath.lower() for keyword in ['chat', 'completions', 'embeddings', 'images', 'audio', 'moderations', 'models']):
                 final_path = f'v1/{processed_subpath}'
             else:
                 final_path = processed_subpath
