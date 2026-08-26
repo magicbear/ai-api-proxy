@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.bak*
+*.tmp
+.DS_Store
+.AppleDouble/
+._*
+proxy_config_backup.json
