@@ -6,6 +6,8 @@ Supports multiple endpoints with different API keys and real-time monitoring
 
 import json
 import os
+import shutil
+import subprocess
 import requests
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_socketio import SocketIO, emit
@@ -567,7 +569,7 @@ class APIProxyServer:
             if PROXY_READ_TIMEOUT > 0:
                 upstream_timeout = (PROXY_CONNECT_TIMEOUT, PROXY_READ_TIMEOUT)
             else:
-                upstream_timeout = PROXY_CONNECT_TIMEOUT
+                upstream_timeout = (PROXY_CONNECT_TIMEOUT, None)
 
             if req.method == 'GET':
                 response = requests.get(target_url, headers=headers, params=req.args, stream=True, timeout=upstream_timeout)
@@ -1133,6 +1135,176 @@ def aggregated_models():
         "object": "list",
         "data": prefixed_models
     })
+
+
+# ---------- ccusage integration ----------
+# Token/cost usage across all coding agents (claude, codex, opencode, openclaw,
+# grok, antigravity, ...) is reported by the `ccusage` CLI. We shell out to it,
+# cache the parsed result for a few minutes, and expose it as /ccusage for the
+# monitor page. Agent/model breakdown is grouped by day; the frontend folds the
+# days into collapsible month sections.
+
+CCUSAGE_CACHE_TTL = float(os.environ.get('CCUSAGE_CACHE_TTL', '300'))
+_ccusage_cache_lock = Lock()
+_ccusage_cache = {'ts': 0.0, 'data': None}
+
+# Every ccusage agent subcommand we may need to query for a per-agent breakdown.
+CCUSAGE_AGENT_COMMANDS = [
+    'claude', 'codex', 'opencode', 'openclaw', 'grok', 'antigravity',
+    'gemini', 'kimi', 'qwen', 'copilot', 'goose', 'amp', 'droid',
+    'codebuff', 'hermes', 'pi', 'kilo',
+]
+
+
+def resolve_ccusage_bin():
+    env_bin = (os.environ.get('CCUSAGE_BIN') or '').strip()
+    if env_bin:
+        return env_bin
+    found = shutil.which('ccusage')
+    if found:
+        return found
+    candidates = [
+        os.path.join(os.path.expanduser('~'), '.cargo', 'bin', 'ccusage'),
+        os.path.join(os.path.expanduser('~'), '.local', 'bin', 'ccusage'),
+        '/home/magicbear/.cargo/bin/ccusage',
+        '/usr/local/bin/ccusage',
+    ]
+    for c in candidates:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return 'ccusage'
+
+
+CCUSAGE_BIN = resolve_ccusage_bin()
+
+_CCUSAGE_TOKEN_FIELDS = ('inputTokens', 'outputTokens', 'cacheReadTokens',
+                         'cacheCreationTokens', 'totalTokens', 'totalCost')
+
+
+def _run_ccusage(args, timeout=90):
+    """Run ccusage and return parsed JSON, or None on any failure."""
+    try:
+        proc = subprocess.run([CCUSAGE_BIN] + args, capture_output=True,
+                              text=True, timeout=timeout)
+        if proc.returncode != 0:
+            logger.warning(f"ccusage {' '.join(args)} exited {proc.returncode}: {proc.stderr[:200]}")
+            return None
+        return json.loads(proc.stdout)
+    except Exception as e:
+        logger.error(f"ccusage {' '.join(args)} failed: {e}")
+        return None
+
+
+def _ccusage_day_totals(day):
+    """Normalize a ccusage daily row into a flat totals dict."""
+    return {k: day.get(k, 0) or 0 for k in _CCUSAGE_TOKEN_FIELDS}
+
+
+def _build_ccusage_payload():
+    """Query ccusage once (all agents) plus one query per detected agent and
+    assemble {months -> days -> agents -> models} JSON for the monitor page."""
+    all_data = _run_ccusage(['daily', '-j'])
+    if not all_data or not all_data.get('daily'):
+        return None
+
+    days_all = all_data['daily']
+
+    # Agents that actually have activity, in the order they first appear.
+    agents_seen = []
+    seen = set()
+    for day in days_all:
+        for agent in (day.get('metadata') or {}).get('agents') or []:
+            if agent not in seen:
+                seen.add(agent)
+                agents_seen.append(agent)
+
+    # Per-agent daily data keyed by agent -> date.
+    agent_daily = {}
+    for agent in agents_seen:
+        d = _run_ccusage([agent, 'daily', '-j'])
+        if d and d.get('daily'):
+            agent_daily[agent] = {day.get('date') or day.get('period'): day for day in d['daily']}
+
+    # month -> date -> {'_totals': ..., 'agents': [...]}
+    months = {}
+    for day in days_all:
+        date = day['period']
+        month = date[:7]
+        cell = months.setdefault(month, {}).setdefault(date, {'_totals': None, 'agents': []})
+        if cell['_totals'] is None:
+            cell['_totals'] = _ccusage_day_totals(day)
+
+    for agent, day_map in agent_daily.items():
+        for date, day in day_map.items():
+            month = date[:7]
+            cell = (months.get(month) or {}).get(date)
+            if cell is None:
+                continue
+            models = []
+            for b in day.get('modelBreakdowns') or []:
+                models.append({
+                    'modelName': b.get('modelName') or 'unknown',
+                    'inputTokens': b.get('inputTokens', 0) or 0,
+                    'outputTokens': b.get('outputTokens', 0) or 0,
+                    'cacheReadTokens': b.get('cacheReadTokens', 0) or 0,
+                    'cacheCreationTokens': b.get('cacheCreationTokens', 0) or 0,
+                    'cost': b.get('cost', 0) or 0,
+                })
+            cell['agents'].append({
+                'agent': agent,
+                'totals': _ccusage_day_totals(day),
+                'models': models,
+            })
+
+    result_months = []
+    for month in sorted(months.keys()):
+        days = []
+        month_totals = {k: 0 for k in _CCUSAGE_TOKEN_FIELDS}
+        for date in sorted(months[month].keys()):
+            cell = months[month][date]
+            day_totals = cell['_totals'] or {k: 0 for k in _CCUSAGE_TOKEN_FIELDS}
+            for k in month_totals:
+                month_totals[k] += day_totals.get(k, 0) or 0
+            cell['agents'].sort(key=lambda a: -(a['totals'].get('totalTokens') or 0))
+            days.append({'date': date, 'totals': day_totals, 'agents': cell['agents']})
+        days.sort(key=lambda d: d['date'], reverse=True)
+        result_months.append({'month': month, 'totals': month_totals, 'days': days})
+
+    result_months.sort(key=lambda m: m['month'], reverse=True)
+
+    return {
+        'generatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'ccusage': CCUSAGE_BIN,
+        'agents': agents_seen,
+        'months': result_months,
+    }
+
+
+def fetch_ccusage(refresh=False):
+    """Return cached ccusage payload, rebuilding when stale or refresh is set."""
+    with _ccusage_cache_lock:
+        cached = _ccusage_cache['data']
+        fresh = (not refresh and cached is not None
+                 and time.time() - _ccusage_cache['ts'] < CCUSAGE_CACHE_TTL)
+        if fresh:
+            return cached
+    data = _build_ccusage_payload()
+    if data is not None:
+        with _ccusage_cache_lock:
+            _ccusage_cache['ts'] = time.time()
+            _ccusage_cache['data'] = data
+    return data
+
+
+@app.route('/ccusage')
+def ccusage_route():
+    refresh = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
+    data = fetch_ccusage(refresh=refresh)
+    if data is None:
+        return jsonify({'error': 'ccusage not available or returned no data',
+                        'ccusage': CCUSAGE_BIN}), 502
+    data['cached'] = not refresh
+    return jsonify(data)
 
 
 # Global reference to the APIProxyServer instance to reuse its methods

@@ -83,6 +83,7 @@
         }
         .pill.offline .dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
         .pill.offline { color: var(--red); }
+        .pill.conn-dot { padding: 9px 10px; cursor: default; }
 
         .btn {
             display: inline-flex; align-items: center; gap: 6px;
@@ -245,6 +246,138 @@
         .tbl tr:last-child td { border-bottom: none; }
         .tbl tr:hover td { background: rgba(255, 255, 255, .02); }
         .tbl .num { font-weight: 700; }
+
+        /* ---------- ccusage (monthly/daily folding) ---------- */
+        .ccu-month {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            overflow: hidden;
+            background: var(--panel);
+        }
+        .ccu-month-head {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 11px 16px;
+            background: var(--panel-2);
+            cursor: pointer; user-select: none;
+        }
+        .ccu-month-head:hover { background: #29355a; }
+        .ccu-month-head .mm { font-size: 15px; font-weight: 700; }
+        .ccu-month-head .mt { font-size: 11.5px; color: var(--text-dim); display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; }
+        .ccu-month-body { display: none; padding: 12px; }
+        .ccu-month.open .ccu-month-body { display: block; }
+        .ccu-caret {
+            color: var(--text-dim); font-size: 11px;
+            transition: transform .15s ease; flex-shrink: 0;
+        }
+        .ccu-month.open .ccu-caret { transform: rotate(90deg); }
+
+        .ccu-day { border-bottom: 1px solid var(--border-soft); }
+        .ccu-day:last-child { border-bottom: none; }
+        .ccu-day-head {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 9px 12px; cursor: pointer; user-select: none; border-radius: 8px;
+        }
+        .ccu-day-head:hover { background: rgba(255, 255, 255, .03); }
+        .ccu-day-head .dt { font-weight: 700; font-size: 13px; min-width: 88px; }
+        .ccu-day-head .dt .wd { color: var(--text-faint); font-weight: 500; font-size: 11px; margin-left: 6px; }
+        .ccu-day-head .dl { font-size: 11.5px; color: var(--text-dim); display: flex; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+        .ccu-day-body { display: none; padding: 4px 12px 12px 20px; }
+        .ccu-day.open .ccu-day-body { display: block; }
+
+        .ccu-agent {
+            border: 1px solid var(--border-soft);
+            border-radius: 8px; margin-bottom: 8px; overflow: hidden;
+            background: var(--panel-2);
+        }
+        .ccu-agent:last-child { margin-bottom: 0; }
+        .ccu-agent-head {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            padding: 8px 12px; cursor: pointer; user-select: none;
+        }
+        .ccu-agent-head:hover { background: rgba(255, 255, 255, .04); }
+        .ccu-agent-head .an { font-weight: 700; font-size: 12.5px; color: var(--accent-2); }
+        .ccu-agent-head .al { font-size: 11.5px; color: var(--text-dim); display: flex; gap: 12px; flex-wrap: wrap; margin-left: auto; }
+        .ccu-agent-body { display: none; overflow-x: auto; }
+        .ccu-agent.open .ccu-agent-body { display: block; }
+        .ccu-agent-body .tbl { min-width: 560px; }
+        .ccu-agent-body .tbl th, .ccu-agent-body .tbl td.num { white-space: nowrap; }
+
+        .ccu-num { font-variant-numeric: tabular-nums; }
+        .ccu-num.muted { color: var(--text-dim); }
+        .ccu-cost { color: var(--amber); font-weight: 700; font-variant-numeric: tabular-nums; }
+        .ccu-agent-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 1px 8px; border-radius: 999px;
+            font-size: 11px; font-weight: 600;
+            background: rgba(139, 92, 246, .15); color: var(--accent-2);
+        }
+
+        .ccu-filters {
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            margin-bottom: 12px; padding: 10px 12px;
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+        .ccu-filters select {
+            padding: 6px 10px;
+            background: var(--bg-soft); color: var(--text);
+            border: 1px solid var(--border); border-radius: 8px;
+            font-size: 12.5px; outline: none; max-width: 240px;
+        }
+        .ccu-filters select:focus { border-color: var(--accent); }
+        .ccu-filter-label { font-size: 11.5px; color: var(--text-dim); font-weight: 600; }
+        .ccu-filter-reset { padding: 6px 12px; font-size: 12px; }
+        .ccu-filter-count { margin-left: auto; }
+
+        /* View tabs inside ccusage: 按时间 / 按 Agent / 按模型 */
+        .ccu-view-tabs {
+            display: flex; gap: 4px;
+            background: var(--bg-soft);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 4px; margin-bottom: 12px;
+            width: fit-content; max-width: 100%;
+        }
+        .ccu-view-tab {
+            padding: 7px 16px; border: none; border-radius: 8px;
+            background: transparent; color: var(--text-dim);
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: all .15s ease; white-space: nowrap;
+        }
+        .ccu-view-tab:hover { color: var(--text); background: rgba(255, 255, 255, .04); }
+        .ccu-view-tab.active {
+            color: #fff;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            box-shadow: 0 3px 10px rgba(99, 102, 241, .35);
+        }
+        .ccu-view { display: none; }
+        .ccu-view.active { display: block; }
+
+        .ccu-summary-box {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow-x: auto;
+            background: var(--panel);
+        }
+        .ccu-summary-head {
+            padding: 9px 12px;
+            background: var(--panel-2);
+            border-bottom: 1px solid var(--border);
+            font-size: 12.5px; font-weight: 700; color: var(--accent-2);
+        }
+        .ccu-summary-box .tbl { width: 100%; min-width: 560px; }
+        .ccu-summary-box .tbl th {
+            font-size: 10.5px; padding: 8px 10px;
+            background: var(--panel-2); color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: .5px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        .ccu-summary-box .tbl td { padding: 7px 10px; font-size: 12px; }
+        .ccu-summary-box .tbl td.name { font-weight: 600; word-break: break-word; min-width: 150px; }
+        .ccu-summary-box .tbl td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
 
         /* ---------- Model cards ---------- */
         .group {
@@ -565,7 +698,7 @@
                 </div>
             </div>
             <div class="header-actions">
-                <span class="pill" id="conn-pill"><span class="dot"></span><span id="connection-status">Connected</span></span>
+                <span class="pill conn-dot" id="conn-pill" title="WebSocket 已连接"><span class="dot"></span></span>
                 <button class="btn" onclick="refreshModels()" title="刷新所有模型缓存">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
                     刷新模型
@@ -576,52 +709,43 @@
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('monitor', this)">实时监控</button>
             <button class="tab-btn" onclick="switchTab('statistics', this)">Token 统计</button>
+            <button class="tab-btn" onclick="switchTab('ccusage', this)">CC 用量</button>
             <button class="tab-btn" onclick="switchTab('flow', this)">模型流向图</button>
             <button class="tab-btn" onclick="switchTab('endpoints', this)">端点模型</button>
             <button class="tab-btn" onclick="switchTab('config', this)">配置文件</button>
         </div>
 
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-icon blue">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2"/><path d="M22 3v4"/></svg>
-                </div>
-                <div>
-                    <div class="stat-label">Active Connections</div>
-                    <div class="stat-value" id="connections-count">0</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon green">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
-                </div>
-                <div>
-                    <div class="stat-label">Active Streams</div>
-                    <div class="stat-value" id="streams-count">0</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon amber">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </div>
-                <div>
-                    <div class="stat-label">Total Messages</div>
-                    <div class="stat-value" id="messages-count">0</div>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon violet">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="2"/><polyline points="6 8 12 2 18 8"/><path d="M4 22h16"/></svg>
-                </div>
-                <div>
-                    <div class="stat-label">WebSocket</div>
-                    <div class="stat-value" id="ws-status">Live</div>
-                </div>
-            </div>
-        </div>
-
         <!-- Monitor -->
         <div id="monitor-tab" class="tab-content active">
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-icon blue">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2"/><path d="M22 3v4"/></svg>
+                    </div>
+                    <div>
+                        <div class="stat-label">Active Connections</div>
+                        <div class="stat-value" id="connections-count">0</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                    </div>
+                    <div>
+                        <div class="stat-label">Active Streams</div>
+                        <div class="stat-value" id="streams-count">0</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon amber">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <div>
+                        <div class="stat-label">Total Messages</div>
+                        <div class="stat-value" id="messages-count">0</div>
+                    </div>
+                </div>
+            </div>
             <div class="grid-2">
                 <div class="panel">
                     <div class="panel-header"><span>活动连接</span><span class="hint" id="conn-count-hint">0</span></div>
@@ -650,6 +774,43 @@
             <div class="panel">
                 <div class="panel-header">按 Provider 统计 Token 用量</div>
                 <div class="panel-body tall"><div id="token-stats-content"><p class="empty">暂无 Token 使用数据</p></div></div>
+            </div>
+        </div>
+
+        <!-- CC Usage -->
+        <div id="ccusage-tab" class="tab-content">
+            <div class="panel">
+                <div class="panel-header">
+                    <span>ccusage 用量（按月折叠）</span>
+                    <span class="hint" id="ccusage-meta">—</span>
+                </div>
+                <div class="panel-body" style="max-height:none;">
+                    <div class="toolbar" style="margin-bottom:10px;">
+                        <span class="hint" style="font-size:11.5px;color:var(--text-dim);">
+                            数据来源：<code style="color:var(--blue);" id="ccusage-src">ccusage</code>
+                        </span>
+                        <div class="spacer"></div>
+                        <button class="btn" onclick="toggleAllCcusage(this)">全部展开</button>
+                        <button class="btn" onclick="loadCcusage(true)">刷新</button>
+                    </div>
+                    <div class="ccu-filters">
+                        <span class="ccu-filter-label">筛选</span>
+                        <select id="ccu-agent-filter" onchange="applyCcusageFilter()"><option value="">全部 Agent</option></select>
+                        <select id="ccu-model-filter" onchange="applyCcusageFilter()"><option value="">全部 模型</option></select>
+                        <button class="btn ccu-filter-reset" onclick="resetCcusageFilter()">重置</button>
+                        <span class="hint" id="ccu-filter-count" style="font-size:11px;color:var(--text-dim);"></span>
+                    </div>
+                    <div class="ccu-view-tabs">
+                        <button class="ccu-view-tab active" onclick="switchCcuView('time', this)">按时间</button>
+                        <button class="ccu-view-tab" onclick="switchCcuView('agent', this)">按 Agent</button>
+                        <button class="ccu-view-tab" onclick="switchCcuView('model', this)">按模型</button>
+                    </div>
+                    <div id="ccu-view-time" class="ccu-view active">
+                        <div id="ccusage-content"><p class="empty">加载中…</p></div>
+                    </div>
+                    <div id="ccu-view-agent" class="ccu-view"></div>
+                    <div id="ccu-view-model" class="ccu-view"></div>
+                </div>
             </div>
         </div>
 
@@ -739,6 +900,9 @@
         let configData = null;
         let endpointHealth = null;
         let visionRedirects = {};
+        let ccusageData = null;
+        let ccuAgentFilter = '';
+        let ccuModelFilter = '';
 
         // ============ Toasts ============
         function showToast(msg, type) {
@@ -753,18 +917,21 @@
         // ============ Socket ============
         const socket = io({ path: '/socket.io', transports: ['websocket', 'polling'] });
 
+        function setConnPill(online) {
+            const pill = document.getElementById('conn-pill');
+            if (!pill) return;
+            pill.classList.toggle('offline', !online);
+            pill.title = online ? 'WebSocket 已连接' : 'WebSocket 已断开';
+        }
+
         socket.on('connect', function () {
-            document.getElementById('connection-status').textContent = 'Connected';
-            document.getElementById('ws-status').textContent = 'Live';
-            document.getElementById('conn-pill').classList.remove('offline');
+            setConnPill(true);
             socket.emit('request_initial_models');
             socket.emit('request_config');
         });
 
         socket.on('disconnect', function () {
-            document.getElementById('connection-status').textContent = 'Disconnected';
-            document.getElementById('ws-status').textContent = 'Offline';
-            document.getElementById('conn-pill').classList.add('offline');
+            setConnPill(false);
         });
 
         socket.on('initial_data', function (data) {
@@ -823,8 +990,7 @@
         });
 
         socket.on('connect_error', function () {
-            document.getElementById('conn-pill').classList.add('offline');
-            document.getElementById('connection-status').textContent = 'Disconnected';
+            setConnPill(false);
         });
 
         // ============ Stats ============
@@ -1007,6 +1173,343 @@
             html += `<tr><td><b>合计</b></td><td class="num">${totalP}</td><td class="num">${totalC}</td><td class="num">${totalT}</td></tr>`;
             html += '</tbody></table>';
             div.innerHTML = html;
+        }
+
+        // ============ ccusage (agent/model token usage) ============
+        function fmtTokens(n) {
+            if (n === undefined || n === null) return '0';
+            return Number(n).toLocaleString('en-US');
+        }
+        function fmtCost(n) {
+            if (n === undefined || n === null) n = 0;
+            n = Number(n);
+            if (n === 0) return '$0';
+            return n < 0.01 ? '$' + n.toFixed(4) : '$' + n.toFixed(2);
+        }
+        const CCU_WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        function ccuWeekday(dateStr) {
+            const d = new Date(dateStr + 'T00:00:00');
+            return isNaN(d.getTime()) ? '' : CCU_WEEKDAYS[d.getDay()];
+        }
+
+        function loadCcusage(forceRefresh) {
+            const box = document.getElementById('ccusage-content');
+            if (!box) return;
+            const url = forceRefresh ? '/ccusage?refresh=1' : '/ccusage';
+            fetch(url)
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (data) {
+                    ccusageData = data;
+                    renderCcusage(data);
+                })
+                .catch(function (err) {
+                    box.innerHTML = '<p class="empty">ccusage 数据加载失败：' + escText(err.message) + '</p>';
+                });
+        }
+
+        function ccuTotalsLabel(totals) {
+            totals = totals || {};
+            return '<span><b class="ccu-num">' + fmtTokens(totals.totalTokens) + '</b> tokens</span>' +
+                '<span class="ccu-num muted">in ' + fmtTokens(totals.inputTokens) + '</span>' +
+                '<span class="ccu-num muted">out ' + fmtTokens(totals.outputTokens) + '</span>' +
+                '<span class="ccu-num muted">cacheR ' + fmtTokens(totals.cacheReadTokens) + '</span>' +
+                '<span class="ccu-cost">' + fmtCost(totals.totalCost) + '</span>';
+        }
+
+        function ccuCollectAll(data) {
+            const agents = {};   // agent -> totals
+            const models = {};   // model -> totals
+            const agentModels = {}; // agent -> {model: true}
+            const modelAgents = {}; // model -> {agent: true}
+            (data.months || []).forEach(function (m) {
+                (m.days || []).forEach(function (d) {
+                    (d.agents || []).forEach(function (a) {
+                        const ag = agents[a.agent] || (agents[a.agent] = ccuEmptyTotals());
+                        ccuAddTotals(ag, a.totals);
+                        (a.models || []).forEach(function (md) {
+                            const mo = models[md.modelName] || (models[md.modelName] = ccuEmptyTotals());
+                            ccuAddTotals(mo, md);
+                            (agentModels[a.agent] = agentModels[a.agent] || {})[md.modelName] = true;
+                            (modelAgents[md.modelName] = modelAgents[md.modelName] || {})[a.agent] = true;
+                        });
+                    });
+                });
+            });
+            return { agents: agents, models: models, agentModels: agentModels, modelAgents: modelAgents };
+        }
+
+        function ccuEmptyTotals() {
+            return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, totalTokens: 0, totalCost: 0 };
+        }
+
+        function ccuAddTotals(dst, src) {
+            src = src || {};
+            dst.inputTokens += Number(src.inputTokens) || 0;
+            dst.outputTokens += Number(src.outputTokens) || 0;
+            dst.cacheReadTokens += Number(src.cacheReadTokens) || 0;
+            dst.cacheCreationTokens += Number(src.cacheCreationTokens) || 0;
+            dst.totalTokens += Number(src.totalTokens) || 0;
+            dst.totalCost += Number(src.totalCost !== undefined ? src.totalCost : src.cost) || 0;
+        }
+
+        function ccuFilterMatch(agent, model) {
+            if (ccuAgentFilter && agent !== ccuAgentFilter) return false;
+            if (ccuModelFilter && model !== ccuModelFilter) return false;
+            return true;
+        }
+
+        function populateCcusageFilters(data) {
+            const agentSel = document.getElementById('ccu-agent-filter');
+            const modelSel = document.getElementById('ccu-model-filter');
+            if (!agentSel || !modelSel) return;
+            const col = ccuCollectAll(data);
+            const agents = Object.keys(col.agents).sort();
+            const models = Object.keys(col.models).sort();
+            const prevAgent = ccuAgentFilter, prevModel = ccuModelFilter;
+            agentSel.innerHTML = '<option value="">全部 Agent</option>' + agents.map(function (a) {
+                return '<option value="' + escAttr(a) + '"' + (a === prevAgent ? ' selected' : '') + '>' + escText(a) + '</option>';
+            }).join('');
+            modelSel.innerHTML = '<option value="">全部 模型</option>' + models.map(function (m) {
+                return '<option value="' + escAttr(m) + '"' + (m === prevModel ? ' selected' : '') + '>' + escText(m) + '</option>';
+            }).join('');
+            ccuAgentFilter = agentSel.value;
+            ccuModelFilter = modelSel.value;
+        }
+
+        function applyCcusageFilter() {
+            const agentSel = document.getElementById('ccu-agent-filter');
+            const modelSel = document.getElementById('ccu-model-filter');
+            ccuAgentFilter = agentSel ? agentSel.value : '';
+            ccuModelFilter = modelSel ? modelSel.value : '';
+            renderCcusage(ccusageData);
+        }
+
+        function resetCcusageFilter() {
+            ccuAgentFilter = '';
+            ccuModelFilter = '';
+            const agentSel = document.getElementById('ccu-agent-filter');
+            const modelSel = document.getElementById('ccu-model-filter');
+            if (agentSel) agentSel.value = '';
+            if (modelSel) modelSel.value = '';
+            renderCcusage(ccusageData);
+        }
+
+        function ccuModelRowsForAgent(a) {
+            return (a.models || []).filter(function (md) {
+                return ccuFilterMatch(a.agent, md.modelName);
+            });
+        }
+
+        function ccuSumModelRows(rows) {
+            const t = ccuEmptyTotals();
+            rows.forEach(function (md) { ccuAddTotals(t, md); });
+            return t;
+        }
+
+        function renderCcusageSummary(data, col) {
+            const agentWrap = document.getElementById('ccu-view-agent');
+            const modelWrap = document.getElementById('ccu-view-model');
+            if (!agentWrap || !modelWrap) return;
+            const fCount = document.getElementById('ccu-filter-count');
+            if (fCount) {
+                const fparts = [];
+                if (ccuAgentFilter) fparts.push('Agent: ' + ccuAgentFilter);
+                if (ccuModelFilter) fparts.push('模型: ' + ccuModelFilter);
+                fCount.textContent = fparts.length ? ('筛选：' + fparts.join(' · ')) : '';
+            }
+            let agents = Object.keys(col.agents).map(function (k) {
+                const am = col.agentModels[k] || {};
+                const modelsUsed = Object.keys(am).filter(function (mk) {
+                    return !ccuModelFilter || mk === ccuModelFilter;
+                });
+                return { name: k, totals: col.agents[k], modelsUsed: modelsUsed.length };
+            }).filter(function (a) {
+                if (ccuAgentFilter && a.name !== ccuAgentFilter) return false;
+                if (ccuModelFilter && !(col.agentModels[a.name] || {})[ccuModelFilter]) return false;
+                return true;
+            }).sort(function (x, y) { return y.totals.totalTokens - x.totals.totalTokens; });
+
+            let models = Object.keys(col.models).map(function (k) {
+                return { name: k, totals: col.models[k] };
+            }).filter(function (m) {
+                if (ccuModelFilter && m.name !== ccuModelFilter) return false;
+                if (ccuAgentFilter && !(col.modelAgents[m.name] || {})[ccuAgentFilter]) return false;
+                return true;
+            }).sort(function (x, y) { return y.totals.totalTokens - x.totals.totalTokens; });
+
+            function sumRow(t, showName) {
+                return '<tr>' +
+                    '<td class="name">' + showName + '</td>' +
+                    '<td class="num" style="text-align:right;">' + fmtTokens(t.inputTokens) + '</td>' +
+                    '<td class="num" style="text-align:right;">' + fmtTokens(t.outputTokens) + '</td>' +
+                    '<td class="num muted" style="text-align:right;">' + fmtTokens(t.cacheReadTokens) + '</td>' +
+                    '<td class="num muted" style="text-align:right;">' + fmtTokens(t.cacheCreationTokens) + '</td>' +
+                    '<td class="num" style="text-align:right;">' + fmtTokens(t.totalTokens) + '</td>' +
+                    '<td class="ccu-cost" style="text-align:right;">' + fmtCost(t.totalCost) + '</td>' +
+                    '</tr>';
+            }
+
+            let agentHtml = '';
+            if (agents.length) {
+                let ta = ccuEmptyTotals();
+                let rows = '';
+                agents.forEach(function (a) {
+                    ccuAddTotals(ta, a.totals);
+                    rows += sumRow(a.totals, '<span class="ccu-agent-pill">' + escText(a.name) + '</span>' + (a.modelsUsed ? ' <span class="muted" style="font-size:10px;font-weight:500;">' + a.modelsUsed + ' 模型</span>' : ''));
+                });
+                agentHtml = '<table class="tbl"><thead><tr>' +
+                    '<th>Agent</th><th style="text-align:right;">Input</th><th style="text-align:right;">Output</th>' +
+                    '<th style="text-align:right;">Cache 读</th><th style="text-align:right;">Cache 写</th>' +
+                    '<th style="text-align:right;">Total</th><th style="text-align:right;">Cost</th>' +
+                    '</tr></thead><tbody>' + rows + sumRow(ta, '<b>合计</b>') + '</tbody></table>';
+            } else {
+                agentHtml = '<p class="empty" style="padding:12px;">无匹配 Agent</p>';
+            }
+            agentWrap.innerHTML = '<div class="ccu-summary-box"><div class="ccu-summary-head">按 Agent 汇总 (' + agents.length + ')</div>' + agentHtml + '</div>';
+
+            let modelHtml = '';
+            if (models.length) {
+                let tm = ccuEmptyTotals();
+                let rows = '';
+                models.forEach(function (m) {
+                    ccuAddTotals(tm, m.totals);
+                    rows += sumRow(m.totals, escText(m.name));
+                });
+                modelHtml = '<table class="tbl"><thead><tr>' +
+                    '<th>模型</th><th style="text-align:right;">Input</th><th style="text-align:right;">Output</th>' +
+                    '<th style="text-align:right;">Cache 读</th><th style="text-align:right;">Cache 写</th>' +
+                    '<th style="text-align:right;">Total</th><th style="text-align:right;">Cost</th>' +
+                    '</tr></thead><tbody>' + rows + sumRow(tm, '<b>合计</b>') + '</tbody></table>';
+            } else {
+                modelHtml = '<p class="empty" style="padding:12px;">无匹配 模型</p>';
+            }
+            modelWrap.innerHTML = '<div class="ccu-summary-box"><div class="ccu-summary-head">按 模型 汇总 (' + models.length + ')</div>' + modelHtml + '</div>';
+        }
+
+        function switchCcuView(view, btn) {
+            document.querySelectorAll('.ccu-view-tab').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.ccu-view').forEach(function (v) { v.classList.remove('active'); });
+            if (btn) btn.classList.add('active');
+            const target = document.getElementById('ccu-view-' + view);
+            if (target) target.classList.add('active');
+        }
+
+        function renderCcusage(data) {
+            const box = document.getElementById('ccusage-content');
+            if (!box) return;
+            const meta = document.getElementById('ccusage-meta');
+            const src = document.getElementById('ccusage-src');
+            if (src) src.textContent = data.ccusage || 'ccusage';
+            if (meta) {
+                const agents = (data.agents || []).join(' · ');
+                meta.textContent = (data.generatedAt || '') + (agents ? '  |  ' + agents : '');
+            }
+            populateCcusageFilters(data);
+            const col = ccuCollectAll(data);
+            renderCcusageSummary(data, col);
+            const months = data.months || [];
+            if (!months.length) {
+                box.innerHTML = '<p class="empty">暂无 ccusage 用量数据</p>';
+                return;
+            }
+            let html = '';
+            const filtering = !!(ccuAgentFilter || ccuModelFilter);
+            months.forEach(function (m, i) {
+                const openCls = i === 0 ? ' open' : '';
+                let monthT = null;
+                if (filtering) {
+                    monthT = ccuEmptyTotals();
+                    (m.days || []).forEach(function (d) {
+                        (d.agents || []).forEach(function (a) {
+                            if (ccuAgentFilter && a.agent !== ccuAgentFilter) return;
+                            ccuModelRowsForAgent(a).forEach(function (md) { ccuAddTotals(monthT, md); });
+                        });
+                    });
+                }
+                html += '<div class="ccu-month' + openCls + '" id="ccu-month-' + escAttr(m.month) + '">';
+                html += '<div class="ccu-month-head" onclick="toggleCcu(this, \'ccu-month\')">';
+                html += '<span class="ccu-caret">▶</span>';
+                html += '<span class="mm">' + escText(m.month) + '</span>';
+                html += '<span class="mt">' + ccuTotalsLabel(filtering ? monthT : m.totals) + '</span>';
+                html += '</div>';
+                html += '<div class="ccu-month-body">';
+                (m.days || []).forEach(function (d) {
+                    const filteredAgents = (d.agents || []).filter(function (a) {
+                        if (ccuAgentFilter && a.agent !== ccuAgentFilter) return false;
+                        if (ccuModelFilter) {
+                            return (a.models || []).some(function (md) { return md.modelName === ccuModelFilter; });
+                        }
+                        return true;
+                    });
+                    if (!filteredAgents.length) return;
+                    let dayT = d.totals;
+                    if (filtering) {
+                        dayT = ccuEmptyTotals();
+                        filteredAgents.forEach(function (a) {
+                            ccuModelRowsForAgent(a).forEach(function (md) { ccuAddTotals(dayT, md); });
+                        });
+                    }
+                    html += '<div class="ccu-day">';
+                    html += '<div class="ccu-day-head" onclick="toggleCcu(this, \'ccu-day\')">';
+                    html += '<span class="ccu-caret">▶</span>';
+                    html += '<span class="dt">' + escText(d.date) + '<span class="wd">' + escText(ccuWeekday(d.date)) + '</span></span>';
+                    html += '<span class="dl">' + ccuTotalsLabel(dayT) + '</span>';
+                    html += '</div>';
+                    html += '<div class="ccu-day-body">';
+                    filteredAgents.forEach(function (a) {
+                        const rows = ccuModelRowsForAgent(a);
+                        if (ccuModelFilter && !rows.length) return;
+                        const agentT = (ccuModelFilter ? ccuSumModelRows(rows) : a.totals);
+                        html += '<div class="ccu-agent">';
+                        html += '<div class="ccu-agent-head" onclick="toggleCcu(this, \'ccu-agent\')">';
+                        html += '<span class="ccu-caret">▶</span>';
+                        html += '<span class="an"><span class="ccu-agent-pill">' + escText(a.agent) + '</span> ' + (rows.length || 0) + ' 模型</span>';
+                        html += '<span class="al">' + ccuTotalsLabel(agentT) + '</span>';
+                        html += '</div>';
+                        html += '<div class="ccu-agent-body">';
+                        html += '<table class="tbl"><thead><tr>' +
+                            '<th>模型</th><th style="text-align:right;">Input</th><th style="text-align:right;">Output</th>' +
+                            '<th style="text-align:right;">Cache 读</th><th style="text-align:right;">Cache 写</th>' +
+                            '<th style="text-align:right;">Total</th><th style="text-align:right;">Cost</th>' +
+                            '</tr></thead><tbody>';
+                        rows.forEach(function (md) {
+                            html += '<tr>' +
+                                '<td>' + escText(md.modelName) + '</td>' +
+                                '<td class="num ccu-num" style="text-align:right;">' + fmtTokens(md.inputTokens) + '</td>' +
+                                '<td class="num ccu-num" style="text-align:right;">' + fmtTokens(md.outputTokens) + '</td>' +
+                                '<td class="ccu-num muted" style="text-align:right;">' + fmtTokens(md.cacheReadTokens) + '</td>' +
+                                '<td class="ccu-num muted" style="text-align:right;">' + fmtTokens(md.cacheCreationTokens) + '</td>' +
+                                '<td class="num ccu-num" style="text-align:right;">' + fmtTokens((md.inputTokens || 0) + (md.outputTokens || 0) + (md.cacheReadTokens || 0) + (md.cacheCreationTokens || 0)) + '</td>' +
+                                '<td class="ccu-cost" style="text-align:right;">' + fmtCost(md.cost) + '</td>' +
+                                '</tr>';
+                        });
+                        html += '</tbody></table>';
+                        html += '</div></div>';
+                    });
+                    html += '</div></div>';
+                });
+                html += '</div></div>';
+            });
+            box.innerHTML = html;
+        }
+
+        function toggleCcu(head, cls) {
+            const root = head.parentElement;
+            const wasOpen = root.classList.contains('open');
+            root.classList.toggle('open');
+            // Nested groups default closed; expanding a parent leaves children collapsed.
+            if (!wasOpen && root.querySelector('.ccu-month-body')) {
+                root.querySelectorAll('.ccu-month-body > .ccu-day > .ccu-day-body').forEach(function (b) { b.parentElement.classList.remove('open'); });
+            }
+        }
+
+        function toggleAllCcusage(btn) {
+            if (!ccusageData) return;
+            const content = document.getElementById('ccusage-content');
+            const anyOpen = content.querySelector('.ccu-month.open');
+            const openAll = !anyOpen;
+            content.querySelectorAll('.ccu-month').forEach(function (m) { m.classList.toggle('open', openAll); });
+            btn.textContent = openAll ? '全部收起' : '全部展开';
         }
 
         // ============ Model routing (flow chart) ============
@@ -1411,6 +1914,7 @@
             if (name === 'flow') { refreshModels(); renderFlowChart(); }
             if (name === 'endpoints') { requestEndpointHealth(); }
             if (name === 'config' && !configData) socket.emit('request_config');
+            if (name === 'ccusage' && !ccusageData) loadCcusage(false);
         }
 
         function toggleModelDisplay(modelId, isVisible) { socket.emit('set_model_display', { model_id: modelId, is_displayed: isVisible }); }
