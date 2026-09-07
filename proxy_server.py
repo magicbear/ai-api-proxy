@@ -4,10 +4,13 @@ OpenAI-compatible API Proxy Server with Model Redirect Feature
 Supports multiple endpoints with different API keys and real-time monitoring
 """
 
+import fnmatch
+import ipaddress
 import json
 import os
 import shutil
 import subprocess
+import uuid
 import requests
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_socketio import SocketIO, emit
@@ -130,7 +133,9 @@ custom_model_routing = {}  # Store custom routing overrides set by the UI
 model_display_settings = {}  # Store model display settings
 model_cache_timestamps = {}  # Store timestamps for model caches
 model_redirects = {}  # Store model redirection mapping
-model_vision_redirects = {}  # Store mapping of text-only model -> vision-capable model
+model_vision_redirects = {}  # Store mapping of text-only model -> vision-capable model (entry kept even when disabled)
+model_vision_disabled = set()  # Vision redirects that are configured but toggled OFF in the admin UI
+model_access_rules = []  # Per-key / per-IP model visibility rules (allowlists)
 
 # Initialize Flask app with SocketIO.
 # static_folder is disabled: monitor.html is served via an explicit route and
@@ -148,6 +153,46 @@ engineio_logger.setLevel(logging.ERROR)
 # Use threading mode for better concurrent handling
 socketio = SocketIO(app, cors_allowed_origins="*", logger=False, engineio_logger=False, async_mode='threading')
 
+# Ring buffer of recent server-side errors, surfaced in the monitor for
+# debugging (upstream HTTP errors, timeouts, unhandled exceptions, ...).
+server_errors = []
+server_errors_lock = Lock()
+MAX_SERVER_ERRORS = 200
+
+
+def log_server_error(kind, message, detail=None, status=None, req=None, endpoint=None, model=None):
+    """Record a server-side error and push it to every monitor client.
+
+    `req` may be a Flask request (only valid inside a request context) or a
+    plain dict snapshot {'method','url','remote_address'} for calls made after
+    the request context is gone (e.g. response-close hooks).
+    """
+    try:
+        if req is not None and not isinstance(req, dict):
+            req = {'method': req.method, 'url': req.full_path, 'remote_address': req.remote_addr}
+        entry = {
+            'id': f"{int(time.time())}-{uuid.uuid4().hex[:8]}",
+            'timestamp': datetime.now().isoformat(),
+            'kind': kind,
+            'message': (message or '')[:500],
+            'detail': (detail or '')[-4000:],
+            'status': status,
+            'method': (req or {}).get('method'),
+            'url': (req or {}).get('url'),
+            'endpoint': endpoint,
+            'model': model,
+            'remote_address': (req or {}).get('remote_address'),
+        }
+        with server_errors_lock:
+            server_errors.insert(0, entry)
+            del server_errors[MAX_SERVER_ERRORS:]
+        try:
+            socketio.emit('server_error', {'error': entry})
+        except Exception as e:
+            logger.error(f"Failed to emit server_error event: {e}")
+    except Exception as e:
+        logger.error(f"Failed to record server error: {e}")
+
 # Explicitly serve Socket.IO client library
 @app.route('/socket.io/socket.io.js')
 def socket_io_js():
@@ -159,6 +204,18 @@ def socket_io_js():
             document.head.appendChild(script);
         })();
     """, mimetype='application/javascript')
+
+
+# Catch-all for unhandled exceptions in any route: record for the monitor
+# error log, then fail with a JSON 500.
+@app.errorhandler(Exception)
+def _handle_unexpected_error(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    import traceback
+    log_server_error('handler_exception', str(e), detail=traceback.format_exc(), req=request, status=500)
+    return jsonify({"error": "Internal server error", "detail": str(e)}), 500
 
 class APIProxyServer:
     def __init__(self, config_path='./proxy_config.json'):
@@ -245,17 +302,33 @@ class APIProxyServer:
         except Exception as e:
             logger.error(f"Failed to emit cleanup event for {request_id}: {e}")
 
-    def handle_proxy_request(self, req, endpoint_config, subpath, original_model_id=None):
-        request_id = f"{int(time.time())}-{hash(req.url) % 10000}"
+    def handle_proxy_request(self, req, endpoint_config, subpath, original_model_id=None, upstream_path=None):
+        """Forward req to endpoint_config.
+
+        upstream_path overrides the derived backend path. The keyword heuristic
+        below cannot tell '/pooling' (llama.cpp native) from '/v1/pooling'
+        (OpenAI-style) apart once the 'v1/' prefix is stripped, so the
+        aggregators pass the exact upstream path explicitly.
+        """
+        # uuid suffix guarantees uniqueness even for identical URLs in the
+        # same second (the old hash()%10000 scheme collided and made monitor
+        # entries overwrite each other).
+        request_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
         is_streaming = False
 
         # Track connection
         endpoint_prefix = endpoint_config.get('proxy_path_prefix', 'unknown')
         target_base_url = endpoint_config.get('target_base_url', 'unknown')
 
-        # Extract model from request if it's a chat completion request
+        # Extract model from request if it's a chat completion / embeddings / pooling / audio request
         model_name = None
-        if req.is_json and ('/chat/completions' in req.full_path or '/v1/chat' in req.full_path):
+        if '/audio/transcriptions' in req.full_path or '/audio/translations' in req.full_path:
+            # STT requests carry the model in the multipart form, not JSON
+            try:
+                model_name = req.form.get('model', None)
+            except:
+                pass
+        elif req.is_json and ('/chat/completions' in req.full_path or '/v1/chat' in req.full_path or '/embeddings' in req.full_path or '/pooling' in req.full_path or '/audio/speech' in req.full_path):
             try:
                 json_data = req.get_json()
                 if json_data and isinstance(json_data, dict):
@@ -272,7 +345,10 @@ class APIProxyServer:
             'url': req.full_path,
             'timestamp': datetime.now().isoformat(),
             'start_time': time.time(),
-            'headers': dict(req.headers),
+            # Redact secrets: connection info is broadcast to every monitor
+            # browser, so auth headers must never leave the server.
+            'headers': {k: ('<redacted>' if k.lower() in ('authorization', 'x-api-key') else v)
+                        for k, v in req.headers.items()},
             'remote_address': request.remote_addr,
             'endpoint': endpoint_prefix,
             'target_url': target_base_url,
@@ -298,6 +374,16 @@ class APIProxyServer:
             })
         except Exception as e:
             logger.error(f"Failed to emit connection_added event: {e}")
+
+        # Enforce per-key / per-IP model visibility for direct endpoint calls.
+        # Requests arriving through the aggregated router already passed the
+        # check on the client-visible model (original_model_id is set), and the
+        # redirected backend name is an internal detail the client never sees.
+        if model_name and not getattr(req, 'original_model_id', None):
+            if not model_scope_allows(req, model_name):
+                logger.warning(f"Access denied: model '{model_name}' for client {req.remote_addr}")
+                self.cleanup_connection(request_id, is_streaming)
+                return jsonify({"error": f"Model '{model_name}' is not available for your API key"}), 403
 
         # Process subpath
         processed_subpath = subpath
@@ -380,7 +466,7 @@ class APIProxyServer:
             self.cleanup_connection(request_id, is_streaming)
             return jsonify({
                 "object": "list",
-                "data": prefixed_static_models
+                "data": filter_models_for_request(req, prefixed_static_models)
             })
 
         # Check if this is a pure proxy endpoint without target_base_url
@@ -437,6 +523,9 @@ class APIProxyServer:
                 final_path = processed_subpath
         else:
             final_path = 'v1/'
+
+        if upstream_path:
+            final_path = upstream_path
 
         target_url = urljoin(target_base.rstrip('/') + '/', final_path.lstrip('/'))
 
@@ -517,6 +606,19 @@ class APIProxyServer:
                         data = json.dumps(json_data).encode('utf-8')
             except Exception as e:
                 logger.error(f"Error processing request JSON: {e}")
+        elif req.is_json and ('/embeddings' in req.full_path or '/pooling' in req.full_path or '/audio/speech' in req.full_path):
+            # Aggregated embeddings/pooling/TTS: restore the backend (original) model
+            # name so prefixed client-visible ids resolve upstream.
+            original_model = getattr(req, 'original_model_id', None)
+            if original_model:
+                try:
+                    json_data = req.get_json()
+                    if json_data and isinstance(json_data, dict) and json_data.get('model') != original_model:
+                        json_data['model'] = original_model
+                        data = json.dumps(json_data).encode('utf-8')
+                        logger.info(f"Backend model restoration for {req.full_path}: {original_model}")
+                except Exception as e:
+                    logger.error(f"Error restoring backend model name: {e}")
 
         if is_chat_completions and json_data and isinstance(json_data, dict) and json_data.get('model'):
             final_model = json_data['model']
@@ -571,10 +673,35 @@ class APIProxyServer:
             else:
                 upstream_timeout = (PROXY_CONNECT_TIMEOUT, None)
 
+            # Aggregated audio transcription/translation: the model rides in
+            # the multipart form, so rebuild the body with the backend model
+            # name and let requests re-encode multipart (fresh boundary +
+            # Content-Type/Content-Length).
+            audio_form_rewrite = (req.method == 'POST' and not req.is_json
+                                  and ('/audio/transcriptions' in req.full_path or '/audio/translations' in req.full_path)
+                                  and getattr(req, 'original_model_id', None))
+            audio_files = None
+            if audio_form_rewrite:
+                try:
+                    form = {k: v for k, v in req.form.items()}
+                    form['model'] = req.original_model_id
+                    audio_files = {k: (fs.filename, fs.stream, fs.content_type or 'application/octet-stream')
+                                   for k, fs in req.files.items()}
+                    data = form
+                    for hkey in list(headers.keys()):
+                        if hkey.lower() in ('content-type', 'content-length'):
+                            headers.pop(hkey, None)
+                except Exception as e:
+                    logger.error(f"Failed to rebuild audio multipart body: {e}")
+                    audio_form_rewrite = False
+
             if req.method == 'GET':
                 response = requests.get(target_url, headers=headers, params=req.args, stream=True, timeout=upstream_timeout)
             elif req.method == 'POST':
-                response = requests.post(target_url, headers=headers, data=data, stream=True, timeout=upstream_timeout)
+                if audio_form_rewrite:
+                    response = requests.post(target_url, headers=headers, data=data, files=audio_files, stream=True, timeout=upstream_timeout)
+                else:
+                    response = requests.post(target_url, headers=headers, data=data, stream=True, timeout=upstream_timeout)
             elif req.method == 'PUT':
                 response = requests.put(target_url, headers=headers, data=data, stream=True, timeout=upstream_timeout)
             elif req.method == 'DELETE':
@@ -592,6 +719,18 @@ class APIProxyServer:
             def on_response_close():
                 # Get the final response size from the container
                 final_response_size = response_size_container['size']
+
+                # Record upstream HTTP errors (4xx/5xx) with a body snippet
+                if response.status_code >= 400:
+                    snippet = error_body_container['data']
+                    try:
+                        log_server_error('upstream_http_error',
+                                         f"Upstream HTTP {response.status_code}: {target_url}",
+                                         detail=snippet.decode('utf-8', errors='replace'),
+                                         status=response.status_code, req=req,
+                                         endpoint=endpoint_prefix, model=model_name)
+                    except Exception as e:
+                        logger.error(f"Failed to record upstream HTTP error: {e}")
 
                 # Update the connection info with response size before removal
                 with active_connections_lock:
@@ -672,6 +811,7 @@ class APIProxyServer:
             # Initialize response_size variable to be accessible in on_response_close
             # We'll use a mutable container to hold the value so it can be modified by inner functions
             response_size_container = {'size': 0}
+            error_body_container = {'data': b''}
 
             def generate():
                 try:
@@ -697,6 +837,11 @@ class APIProxyServer:
                             # best-effort and must never break proxy delivery.
                             chunk_bytes = chunk if isinstance(chunk, bytes) else chunk.encode('utf-8')
                             chunk_str = chunk_bytes.decode('utf-8', errors='replace')
+
+                            # Capture the head of upstream error bodies for the
+                            # monitor error log (pass-through stays unchanged).
+                            if response.status_code >= 400 and len(error_body_container['data']) < 65536:
+                                error_body_container['data'] += chunk_bytes
 
                             # Check if this chunk contains usage information for token stats
                             if is_chat_completions and chunk_str.startswith('data: '):
@@ -830,6 +975,9 @@ class APIProxyServer:
 
         except requests.exceptions.Timeout as e:
             logger.error(f"Request to target API timed out: {e}")
+            log_server_error('upstream_timeout', f"Upstream timeout: {target_url}",
+                             detail=str(e), status=504, req=req,
+                             endpoint=endpoint_prefix, model=model_name)
 
             # Clean up tracking (also refreshes server stats)
             self.cleanup_connection(request_id, is_chat_completions and is_streaming)
@@ -838,6 +986,9 @@ class APIProxyServer:
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Request to target API failed: {e}")
+            log_server_error('upstream_error', f"Upstream connection failed: {target_url}",
+                             detail=str(e), status=502, req=req,
+                             endpoint=endpoint_prefix, model=model_name)
 
             # Clean up tracking (also refreshes server stats)
             self.cleanup_connection(request_id, is_chat_completions and is_streaming)
@@ -888,6 +1039,15 @@ def get_cached_models():
     else:
         logger.debug("Using cached models")
     return cached_models
+
+def _carry_model_extras(target, source):
+    """Carry optional upstream model fields (e.g. max_model_len) into the cache."""
+    if not isinstance(source, dict) or not isinstance(target, dict):
+        return
+    for key in ('max_model_len',):
+        if source.get(key) is not None:
+            target[key] = source[key]
+
 
 def fetch_all_models(refresh=True):
     global cached_models, model_routing, last_model_refresh
@@ -960,6 +1120,7 @@ def fetch_all_models(refresh=True):
                                 'is_displayed': model_display_settings.get(final_model_id, existing_display_setting),  # Apply saved display setting
                                 'redirect_to': model_redirects.get(final_model_id)  # Include redirect info
                             }
+                            _carry_model_extras(all_models[final_model_id], model_obj)
 
                             # For routing, prefer local endpoints (starting with /local)
                             if final_model_id not in routing or proxy_prefix.startswith('/local'):
@@ -1036,6 +1197,7 @@ def fetch_all_models(refresh=True):
                                         'is_displayed': model_display_settings.get(final_model_id, existing_display_setting),  # Apply saved display setting
                                         'redirect_to': model_redirects.get(final_model_id)  # Include redirect info
                                     }
+                                    _carry_model_extras(all_models[final_model_id], model)
 
                                     # For routing, prefer local endpoints (starting with /local)
                                     if final_model_id not in routing or proxy_prefix.startswith('/local'):
@@ -1080,6 +1242,8 @@ def handle_connect():
         models_data = list(cached_models.values())
     with model_redirects_lock:
         redirects_data = model_redirects.copy()
+    with server_errors_lock:
+        errors_data = list(server_errors)
 
     # Update server stats before sending initial data
     with server_stats_lock:
@@ -1091,8 +1255,17 @@ def handle_connect():
         'token_stats': stats_data,
         'models': models_data,
         'redirects': redirects_data,
-        'server_stats': current_server_stats
+        'server_stats': current_server_stats,
+        'errors': errors_data
     })
+
+
+@socketio.on('clear_server_errors')
+def handle_clear_server_errors():
+    """Clear the server-side error log (monitor '清空' button)."""
+    with server_errors_lock:
+        del server_errors[:]
+    socketio.emit('errors_cleared', {})
 
 
 # Add routes for the aggregated endpoints
@@ -1107,6 +1280,9 @@ def aggregated_models():
         model for model in current_cached_models.values()
         if model.get('is_displayed', True)  # Default to True if not set
     ]
+
+    # Enforce per-key / per-IP model visibility
+    displayed_models = filter_models_for_request(request, displayed_models)
 
     # Add prefixes to model IDs for display in the aggregated models list
     prefixed_models = []
@@ -1147,35 +1323,51 @@ def aggregated_models():
 CCUSAGE_CACHE_TTL = float(os.environ.get('CCUSAGE_CACHE_TTL', '300'))
 _ccusage_cache_lock = Lock()
 _ccusage_cache = {'ts': 0.0, 'data': None}
-
-# Every ccusage agent subcommand we may need to query for a per-agent breakdown.
-CCUSAGE_AGENT_COMMANDS = [
-    'claude', 'codex', 'opencode', 'openclaw', 'grok', 'antigravity',
-    'gemini', 'kimi', 'qwen', 'copilot', 'goose', 'amp', 'droid',
-    'codebuff', 'hermes', 'pi', 'kilo',
-]
+# Single-flight rebuild lock: concurrent refresh requests coalesce into the
+# one in-flight build instead of spawning duplicate ccusage subprocesses.
+_ccusage_build_lock = Lock()
+# Refresh progress, broadcast to every connected monitor client over
+# 'ccusage_progress' events ({running, done, total, step}).
+_ccusage_refresh_lock = Lock()
+_ccusage_refresh = {'running': False, 'done': 0, 'total': 0, 'step': ''}
 
 
 def resolve_ccusage_bin():
     env_bin = (os.environ.get('CCUSAGE_BIN') or '').strip()
     if env_bin:
         return env_bin
-    found = shutil.which('ccusage')
-    if found:
-        return found
+    # Prefer the cargo (Rust) install over whatever `which` finds: the
+    # npm-global build can lag behind (same reported version, but missing
+    # newer agent support such as antigravity), which silently undercounts.
     candidates = [
         os.path.join(os.path.expanduser('~'), '.cargo', 'bin', 'ccusage'),
         os.path.join(os.path.expanduser('~'), '.local', 'bin', 'ccusage'),
-        '/home/magicbear/.cargo/bin/ccusage',
         '/usr/local/bin/ccusage',
     ]
     for c in candidates:
         if os.path.isfile(c) and os.access(c, os.X_OK):
             return c
-    return 'ccusage'
+    return shutil.which('ccusage') or 'ccusage'
 
 
 CCUSAGE_BIN = resolve_ccusage_bin()
+
+
+def _ccusage_set_progress(done, total, step):
+    """Update the shared refresh progress and broadcast it to all clients."""
+    with _ccusage_refresh_lock:
+        _ccusage_refresh.update({'done': done, 'total': total, 'step': step})
+        snapshot = dict(_ccusage_refresh)
+    try:
+        socketio.emit('ccusage_progress', snapshot)
+    except Exception as e:
+        logger.error(f"Failed to emit ccusage_progress: {e}")
+
+
+def _ccusage_progress_snapshot():
+    with _ccusage_refresh_lock:
+        snapshot = dict(_ccusage_refresh)
+    return snapshot
 
 _CCUSAGE_TOKEN_FIELDS = ('inputTokens', 'outputTokens', 'cacheReadTokens',
                          'cacheCreationTokens', 'totalTokens', 'totalCost')
@@ -1200,48 +1392,118 @@ def _ccusage_day_totals(day):
     return {k: day.get(k, 0) or 0 for k in _CCUSAGE_TOKEN_FIELDS}
 
 
-def _build_ccusage_payload():
-    """Query ccusage once (all agents) plus one query per detected agent and
-    assemble {months -> days -> agents -> models} JSON for the monitor page."""
-    all_data = _run_ccusage(['daily', '-j'])
-    if not all_data or not all_data.get('daily'):
-        return None
+# Disk cache for per-day ccusage rows. Days strictly before today are immutable
+# (usage is attributed by entry timestamp), so their unified rows are stored once
+# and reused across rebuilds; only today is recomputed on every refresh. A manual
+# refresh bypasses the cache and re-seeds all days (also picks up pricing changes
+# and newly installed agents).
+_CCUSAGE_DAY_CACHE_FILE = os.environ.get(
+    'CCUSAGE_DAY_CACHE',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ccusage_day_cache.json'))
 
-    days_all = all_data['daily']
 
-    # Agents that actually have activity, in the order they first appear.
-    agents_seen = []
-    seen = set()
-    for day in days_all:
-        for agent in (day.get('metadata') or {}).get('agents') or []:
-            if agent not in seen:
-                seen.add(agent)
-                agents_seen.append(agent)
+def _ccusage_load_day_cache():
+    try:
+        with open(_CCUSAGE_DAY_CACHE_FILE, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, dict) and isinstance(data.get('days'), dict):
+            days = data['days']
+            # migrate the pre-final format (date -> bare row): those rows were
+            # stored only for days already in the past, so treat them as sealed
+            out = {}
+            for d, v in days.items():
+                if isinstance(v, dict) and 'row' in v and isinstance(v.get('final'), bool):
+                    out[d] = v
+                else:
+                    out[d] = {'row': v, 'final': True}
+            data['days'] = out
+            return data
+    except Exception:
+        pass
+    return {'days': {}, 'agents': []}
 
-    # Per-agent daily data keyed by agent -> date.
-    agent_daily = {}
-    for agent in agents_seen:
-        d = _run_ccusage([agent, 'daily', '-j'])
-        if d and d.get('daily'):
-            agent_daily[agent] = {day.get('date') or day.get('period'): day for day in d['daily']}
+
+def _ccusage_save_day_cache(cache):
+    try:
+        tmp = _CCUSAGE_DAY_CACHE_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(cache, f)
+        os.replace(tmp, _CCUSAGE_DAY_CACHE_FILE)
+    except Exception as e:
+        logger.error(f"Failed to save ccusage day cache: {e}")
+
+
+def _build_ccusage_payload(full=False):
+    """Assemble {months -> days -> agents -> models} JSON for the monitor page.
+
+    Uses one `ccusage daily -j --by-agent` load per rebuild (the --by-agent flag
+    embeds per-agent model breakdowns in the same scan, replacing the old
+    1+N subprocess fan-out).
+
+    Day-cache correctness: a day's JSONL can keep receiving entries after the
+    day itself ends (a long session is appended later), so a row captured while
+    a day was still "today" is stored as non-final. Every rebuild recomputes
+    from the earliest non-final day through today; once a day is recomputed on
+    a later date it is sealed (final) and served from cache forever after."""
+    today = datetime.now().strftime('%Y-%m-%d')
+    cache = _ccusage_load_day_cache()
+    cached_days = cache.get('days') or {}
+
+    if not cached_days or full:
+        # Cold cache or forced re-seed: load the whole history in one go.
+        _ccusage_set_progress(0, 0, 'daily (full seed)')
+        fresh = _run_ccusage(['daily', '-j', '--by-agent'])
+        fresh_rows = (fresh or {}).get('daily') or []
+        if not fresh_rows:
+            return None
+        all_rows = fresh_rows
+    else:
+        # Recompute the unsealed tail (today + any day captured mid-day), then
+        # merge with the sealed history from disk.
+        pending = [d for d, c in cached_days.items() if not c.get('final')]
+        since = min(pending + [today])
+        if since == today:
+            _ccusage_set_progress(0, 0, 'today (history sealed)')
+            fresh = _run_ccusage(['daily', '-j', '--by-agent', '--since', today, '--until', today])
+            fresh_rows = (fresh or {}).get('daily') or []
+            all_rows = [c['row'] for d, c in sorted(cached_days.items())] + fresh_rows
+        else:
+            _ccusage_set_progress(0, 0, f'{since} → today (sealed history from cache)')
+            fresh = _run_ccusage(['daily', '-j', '--by-agent', '--since', since, '--until', today])
+            fresh_rows = (fresh or {}).get('daily') or []
+            fresh_map = {r['period']: r for r in fresh_rows if r.get('period')}
+            all_rows = []
+            for d in sorted(set(cached_days) | set(fresh_map)):
+                if d >= since and d in fresh_map:
+                    all_rows.append(fresh_map[d])
+                else:
+                    all_rows.append(cached_days[d]['row'])
+
+    # store: days strictly before today are final; today stays non-final so it
+    # is recomputed (and completed) on the next rebuild after any late entries
+    for row in all_rows:
+        d = row.get('period')
+        if not d:
+            continue
+        cached_days[d] = {'row': row, 'final': d < today}
+    cache['days'] = cached_days
+    _ccusage_save_day_cache(cache)
+
+    _ccusage_set_progress(1, 1, 'aggregating')
 
     # month -> date -> {'_totals': ..., 'agents': [...]}
     months = {}
-    for day in days_all:
-        date = day['period']
+    for row in all_rows:
+        date = row['period']
         month = date[:7]
         cell = months.setdefault(month, {}).setdefault(date, {'_totals': None, 'agents': []})
         if cell['_totals'] is None:
-            cell['_totals'] = _ccusage_day_totals(day)
-
-    for agent, day_map in agent_daily.items():
-        for date, day in day_map.items():
-            month = date[:7]
-            cell = (months.get(month) or {}).get(date)
-            if cell is None:
+            cell['_totals'] = _ccusage_day_totals(row)
+        for a in row.get('agents') or []:
+            if any(x['agent'] == a['agent'] for x in cell['agents']):
                 continue
             models = []
-            for b in day.get('modelBreakdowns') or []:
+            for b in a.get('modelBreakdowns') or []:
                 models.append({
                     'modelName': b.get('modelName') or 'unknown',
                     'inputTokens': b.get('inputTokens', 0) or 0,
@@ -1251,8 +1513,8 @@ def _build_ccusage_payload():
                     'cost': b.get('cost', 0) or 0,
                 })
             cell['agents'].append({
-                'agent': agent,
-                'totals': _ccusage_day_totals(day),
+                'agent': a['agent'],
+                'totals': _ccusage_day_totals(a),
                 'models': models,
             })
 
@@ -1272,6 +1534,8 @@ def _build_ccusage_payload():
 
     result_months.sort(key=lambda m: m['month'], reverse=True)
 
+    agents_seen = sorted({a['agent'] for row in all_rows for a in row.get('agents') or []})
+
     return {
         'generatedAt': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'ccusage': CCUSAGE_BIN,
@@ -1280,47 +1544,373 @@ def _build_ccusage_payload():
     }
 
 
-def fetch_ccusage(refresh=False):
-    """Return cached ccusage payload, rebuilding when stale or refresh is set."""
-    with _ccusage_cache_lock:
-        cached = _ccusage_cache['data']
-        fresh = (not refresh and cached is not None
-                 and time.time() - _ccusage_cache['ts'] < CCUSAGE_CACHE_TTL)
-        if fresh:
-            return cached
-    data = _build_ccusage_payload()
-    if data is not None:
+def _ccusage_do_refresh(full=False):
+    """Single-flight ccusage rebuild; broadcasts progress and the fresh
+    payload ('ccusage_updated') to every connected monitor client."""
+    if _ccusage_build_lock.locked():
+        return  # a refresh is already in flight and will broadcast the result
+    with _ccusage_build_lock:
+        with _ccusage_refresh_lock:
+            _ccusage_refresh.update({'running': True, 'done': 0, 'total': 0,
+                                     'step': 'starting'})
+        try:
+            data = _build_ccusage_payload(full=full)
+        except Exception as e:
+            logger.error(f"ccusage refresh failed: {e}")
+            data = None
+        finally:
+            with _ccusage_refresh_lock:
+                _ccusage_refresh.update({'running': False, 'done': 0,
+                                         'total': 0, 'step': ''})
+        if data is None:
+            try:
+                socketio.emit('ccusage_error',
+                              {'message': 'ccusage 刷新失败：无数据返回'})
+            except Exception as e:
+                logger.error(f"Failed to emit ccusage_error: {e}")
+            return
         with _ccusage_cache_lock:
             _ccusage_cache['ts'] = time.time()
             _ccusage_cache['data'] = data
-    return data
+        payload = dict(data)
+        payload['cached'] = False
+        try:
+            socketio.emit('ccusage_updated', payload)
+        except Exception as e:
+            logger.error(f"Failed to emit ccusage_updated: {e}")
+
+
+def fetch_ccusage(refresh=False, full=False):
+    """Return the cached ccusage payload; never blocks on a rebuild.
+
+    Fresh (within TTL): return as-is. Stale or explicit refresh: serve the
+    current payload immediately and rebuild in the background — the fresh
+    result reaches clients via the 'ccusage_updated' broadcast."""
+    with _ccusage_cache_lock:
+        cached = _ccusage_cache['data']
+        fresh = (cached is not None
+                 and time.time() - _ccusage_cache['ts'] < CCUSAGE_CACHE_TTL)
+    if fresh and not refresh:
+        return cached
+    socketio.start_background_task(_ccusage_do_refresh, full=full)
+    return cached
+
+
+@socketio.on('ccusage_refresh')
+def handle_ccusage_refresh(data=None):
+    """Kick off a background ccusage rebuild; progress/result go out over
+    'ccusage_progress' / 'ccusage_updated' broadcasts to all clients.
+    Emit with {full: true} to re-seed every cached day from scratch."""
+    full = isinstance(data, dict) and bool(data.get('full'))
+    socketio.start_background_task(_ccusage_do_refresh, full=full)
 
 
 @app.route('/ccusage')
 def ccusage_route():
     refresh = request.args.get('refresh', '').lower() in ('1', 'true', 'yes')
-    data = fetch_ccusage(refresh=refresh)
+    full = request.args.get('full', '').lower() in ('1', 'true', 'yes')
+    data = fetch_ccusage(refresh=refresh, full=full)
+    progress = _ccusage_progress_snapshot()
     if data is None:
         return jsonify({'error': 'ccusage not available or returned no data',
-                        'ccusage': CCUSAGE_BIN}), 502
+                        'ccusage': CCUSAGE_BIN,
+                        'refreshing': progress['running'],
+                        'progress': progress}), 502
     data['cached'] = not refresh
+    data['refreshing'] = progress['running']
+    data['progress'] = progress
+    return jsonify(data)
+
+
+# ---------------------------------------------------------------------------
+# Ray cluster status (optional; enable with "ray_dashboard" in proxy_config).
+# Reads the Ray dashboard HTTP API (node inventory + Ray resource usage).
+# ---------------------------------------------------------------------------
+RAY_STATUS_TTL = 10.0
+RAY_HISTORY_SAMPLE_INTERVAL = 10.0            # 采样间隔（秒）
+RAY_HISTORY_MAX = 360                         # 保留样本数（360 × 10s ≈ 1 小时）
+_ray_status_cache = {'ts': 0.0, 'data': None}
+_ray_status_lock = Lock()
+ray_history = []            # 集群负载历史 [{ts, cpu, mem, gpu, vram}]
+ray_history_lock = Lock()
+
+
+def _ray_history_sampler():
+    """后台采样线程：定期记录集群负载，供 monitor 历史图表使用。"""
+    while True:
+        time.sleep(RAY_HISTORY_SAMPLE_INTERVAL)
+        try:
+            if not _ray_dashboard_url():
+                continue
+            data = fetch_ray_status(_ray_dashboard_url())
+            nodes = (data or {}).get('nodes', [])
+            cpus = [n.get('cpu_percent') for n in nodes if n.get('cpu_percent') is not None]
+            mem_used = sum(n.get('mem_used') or 0 for n in nodes)
+            mem_total = sum(n.get('mem_total') or 0 for n in nodes)
+            vram_used = sum(g.get('mem_used') or 0 for n in nodes for g in (n.get('gpus') or []))
+            vram_total = sum(g.get('mem_total') or 0 for n in nodes for g in (n.get('gpus') or []))
+            gpu_nodes = {}
+            for n in nodes:
+                utils = [g.get('util') for g in (n.get('gpus') or []) if g.get('util') is not None]
+                if utils:
+                    gpu_nodes[n.get('hostname') or n.get('ip')] = round(sum(utils) / len(utils), 1)
+            sample = {
+                'ts': time.time(),
+                'cpu': round(cpus and sum(cpus) / len(cpus) or 0, 1),
+                'mem': round(mem_total and mem_used / mem_total * 100 or 0, 1),
+                'vram': round(vram_total and vram_used / vram_total * 100 or 0, 1),
+                'gpu_nodes': gpu_nodes,
+            }
+            with ray_history_lock:
+                ray_history.append(sample)
+                del ray_history[:-RAY_HISTORY_MAX]
+        except Exception as e:
+            logger.error(f"Ray history sample failed: {e}")
+
+
+def start_ray_history_sampler():
+    Thread(target=_ray_history_sampler, daemon=True, name='ray-history').start()
+    logger.info("Ray history sampler started")
+
+
+def _ray_dashboard_url():
+    """Configured Ray dashboard URL, or None when absent/disabled."""
+    try:
+        if 'proxy_server' in globals() and proxy_server:
+            url = (proxy_server.config.get('ray_dashboard') or '').strip()
+            return url or None
+    except Exception:
+        pass
+    return None
+
+
+def _ray_fetch_json(url, timeout=6):
+    r = requests.get(url, timeout=timeout, headers={'User-Agent': 'OpenAI/JS 6.26.0'})
+    r.raise_for_status()
+    return r.json()
+
+
+def fetch_ray_status(base_url):
+    """Build the Ray cluster status payload from the dashboard API.
+
+    Primary source: GET /nodes?view=summary — per-node CPU/mem utilization and
+    per-GPU utilization/VRAM/temperature/power from the node agents.
+    """
+    base = base_url.rstrip('/')
+    payload = {'generatedAt': datetime.now().isoformat(), 'nodes': []}
+
+    try:
+        summary_resp = _ray_fetch_json(base + '/nodes?view=summary')
+        summary = summary_resp.get('data', {}).get('summary', []) or []
+        for s in summary:
+            gpus = []
+            for g in (s.get('gpus') or []):
+                gpus.append({
+                    'index': g.get('index'),
+                    'name': g.get('name'),
+                    'util': g.get('utilizationGpu'),
+                    'mem_used': g.get('memoryUsed'),      # MiB
+                    'mem_total': g.get('memoryTotal'),    # MiB
+                    'temp': g.get('temperatureC'),
+                    'power_w': round(g['powerMw'] / 1000.0, 1) if g.get('powerMw') is not None else None,
+                })
+            cpus = s.get('cpus') or []
+            mem = s.get('mem') or []
+            payload['nodes'].append({
+                'hostname': s.get('hostname'),
+                'ip': s.get('ip'),
+                'cpu_percent': s.get('cpu'),
+                'cpu_total': cpus[0] if len(cpus) > 0 else None,
+                'cpu_used': cpus[1] if len(cpus) > 1 else None,
+                'mem_total': mem[0] if len(mem) > 0 else None,
+                'mem_used': mem[1] if len(mem) > 1 else None,
+                'mem_percent': mem[2] if len(mem) > 2 else None,
+                'gpus': gpus,
+            })
+
+    except Exception as e:
+        logger.warning(f"Ray node summary unavailable: {e}")
+
+    return payload
+
+
+def get_ray_status(force=False):
+    url = _ray_dashboard_url()
+    if not url:
+        return None
+    with _ray_status_lock:
+        cached = _ray_status_cache['data']
+        if not force and cached is not None and time.time() - _ray_status_cache['ts'] < RAY_STATUS_TTL:
+            return cached
+    data = None
+    try:
+        data = fetch_ray_status(url)
+    except Exception as e:
+        logger.error(f"Ray status fetch failed: {e}")
+    if data is not None:
+        with _ray_status_lock:
+            _ray_status_cache['ts'] = time.time()
+            _ray_status_cache['data'] = data
+    return data
+
+
+@app.route('/ray_status')
+def ray_status_route():
+    if not _ray_dashboard_url():
+        return jsonify({'error': 'ray_dashboard not configured'}), 404
+    data = get_ray_status()
+    if data is None:
+        return jsonify({'error': 'Ray dashboard unreachable'}), 502
+    with ray_history_lock:
+        data['history'] = list(ray_history)
     return jsonify(data)
 
 
 # Global reference to the APIProxyServer instance to reuse its methods
 proxy_server_instance = None
 
+def resolve_model_route(requested_model_id):
+    """Resolve a client-visible model id to (selected_endpoint, backend_model_name).
+
+    Shared by the aggregated chat-completions, embeddings and pooling routers:
+    applies model redirects (exact, case-insensitive, bare-name), restores the
+    backend original_id from the model cache, then picks the endpoint via custom
+    routing first and default routing second. Returns (None, None) when no
+    configured endpoint serves the model.
+    """
+    # HANDLE MODEL REDIRECT AT THE ENTRY POINT - DIRECT AND CLEAR
+    final_model_name = requested_model_id  # Default to original if no redirect
+
+    # Check for exact match first
+    if requested_model_id in model_redirects:
+        redirected_to = model_redirects[requested_model_id]
+        logger.info(f"Exact redirect match: {requested_model_id} -> {redirected_to}")
+        final_model_name = redirected_to
+    else:
+        # Try case-insensitive match
+        requested_lower = requested_model_id.lower()
+        for original, target in model_redirects.items():
+            if original.lower() == requested_lower:
+                redirected_to = target
+                logger.info(f"Case-insensitive redirect match: {requested_model_id} -> {redirected_to}")
+                final_model_name = redirected_to
+                break
+        else:
+            # If no direct match, try removing prefix and matching
+            # Extract model name without prefix (part after the last '/')
+            if '/' in requested_model_id:
+                bare_model_name = requested_model_id.split('/')[-1]
+                bare_model_lower = bare_model_name.lower()
+
+                # Try matching the bare model name
+                for original, target in model_redirects.items():
+                    original_bare = original.split('/')[-1] if '/' in original else original
+                    if original_bare.lower() == bare_model_lower:
+                        redirected_to = target
+                        logger.info(f"Bare name redirect match: {requested_model_id} ({bare_model_name}) -> {redirected_to}")
+                        final_model_name = redirected_to
+                        break
+                    elif original.lower() == bare_model_lower:
+                        redirected_to = target
+                        logger.info(f"Bare name redirect match (original without prefix): {requested_model_id} ({bare_model_name}) -> {redirected_to}")
+                        final_model_name = redirected_to
+                        break
+
+    # Now determine the backend model name (original_id from cache)
+    backend_model_name = final_model_name  # Default to final_model_name if not in cache
+    routing_model_id = final_model_name  # Use this for routing lookup
+
+    # If final_model_name is in cache, get its original_id for backend
+    if final_model_name in cached_models:
+        backend_model_name = cached_models[final_model_name].get('original_id', final_model_name)
+        logger.info(f"Found in cache, using backend name: {final_model_name} -> {backend_model_name}")
+    else:
+        # Try to find if final_model_name matches an original_id in cache
+        found_in_cache_as_original = False
+        for cached_id, cached_model in cached_models.items():
+            if cached_model.get('original_id') == final_model_name:
+                routing_model_id = cached_id  # Use cached_id for routing
+                backend_model_name = final_model_name  # Keep as-is for backend
+                logger.info(f"Found as original_id in cache: {final_model_name} (cached as {cached_id})")
+                found_in_cache_as_original = True
+                break
+
+        if not found_in_cache_as_original:
+            # Try case-insensitive match in cache
+            final_lower = final_model_name.lower()
+            for cached_id, cached_model in cached_models.items():
+                if cached_id.lower() == final_lower or cached_model.get('original_id', '').lower() == final_lower:
+                    routing_model_id = cached_id
+                    backend_model_name = cached_model.get('original_id', cached_id)
+                    logger.info(f"Found via case-insensitive match: {final_model_name} -> {routing_model_id} -> {backend_model_name}")
+                    break
+            else:
+                # If still no match, try removing prefix from the requested model name
+                if '/' in final_model_name:
+                    bare_model_name = final_model_name.split('/')[-1]
+                    bare_model_lower = bare_model_name.lower()
+
+                    # Look for the bare name in cache
+                    for cached_id, cached_model in cached_models.items():
+                        cached_bare = cached_id.split('/')[-1] if '/' in cached_id else cached_id
+                        if cached_bare.lower() == bare_model_lower or cached_model.get('original_id', '').split('/')[-1].lower() == bare_model_lower:
+                            routing_model_id = cached_id
+                            backend_model_name = cached_model.get('original_id', cached_id)
+                            logger.info(f"Found via bare name match: {final_model_name} ({bare_model_name}) -> {routing_model_id} -> {backend_model_name}")
+                            break
+
+    logger.info(f"Model processing: {requested_model_id} -> {final_model_name} -> {backend_model_name}")
+
+    # Now find the appropriate endpoint for routing_model_id
+    selected_endpoint = None
+
+    # Check custom routing first
+    if routing_model_id in custom_model_routing:
+        custom_endpoint_prefix = custom_model_routing[routing_model_id]
+        # Find the endpoint configuration that matches this prefix
+        for endpoint in proxy_server.endpoints if 'proxy_server' in globals() and proxy_server else []:
+            if endpoint['proxy_path_prefix'] == custom_endpoint_prefix:
+                selected_endpoint = endpoint
+                logger.info(f"Using custom routing for {routing_model_id} -> {custom_endpoint_prefix}")
+                break
+
+    if not selected_endpoint:
+        # Use default routing
+        endpoints_for_model = model_routing.get(routing_model_id, [])
+
+        # If no direct match, try case-insensitive match
+        if not endpoints_for_model:
+            for route_model in model_routing.keys():
+                if route_model.lower() == routing_model_id.lower():
+                    endpoints_for_model = model_routing.get(route_model, [])
+                    logger.info(f"Using case-insensitive match for routing: {routing_model_id} -> {route_model}")
+                    break
+
+        if not endpoints_for_model:
+            return None, None
+
+        # Select the first endpoint (prioritized)
+        selected_endpoint = endpoints_for_model[0]
+
+    return selected_endpoint, backend_model_name
+
+
 @app.route('/v1/chat/completions', methods=['POST'])
 def aggregated_chat_completions():
     """Route chat completions to the appropriate endpoint based on model, reusing proxy logic for monitoring."""
-    global model_routing, custom_model_routing, proxy_server_instance, proxy_server
-
     try:
         data = request.get_json()
         requested_model_id = data.get('model')  # This is the model ID as sent in the request
 
         if not requested_model_id:
             return jsonify({"error": "Model is required"}), 400
+
+        # Enforce per-key / per-IP model visibility on the client-visible model
+        if not model_scope_allows(request, requested_model_id):
+            logger.warning(f"Access denied: model '{requested_model_id}' for client {request.remote_addr}")
+            log_server_error('router_error', f"Access denied: model '{requested_model_id}'",
+                             status=403, req=request, model=requested_model_id)
+            return jsonify({"error": f"Model '{requested_model_id}' is not available for your API key"}), 403
 
         # HANDLE IMAGE -> VISION MODEL REDIRECT (only for /__proxy__-routed aliases)
         # If a text-only alias served by the pure-proxy endpoint carries image content,
@@ -1335,132 +1925,30 @@ def aggregated_chat_completions():
 
         vision_alias = None
         if _routes_through_proxy(requested_model_id):
+            candidate = None
             if requested_model_id in model_vision_redirects:
-                vision_alias = model_vision_redirects[requested_model_id]
+                candidate = model_vision_redirects[requested_model_id]
+                # Toggle OFF in admin UI (disabled set) or empty value -> no rewrite.
+                if candidate and requested_model_id in model_vision_disabled:
+                    candidate = None
             else:
                 requested_lower = str(requested_model_id).lower()
                 for original, target in model_vision_redirects.items():
                     if str(original).lower() == requested_lower:
-                        vision_alias = target
+                        if target and original not in model_vision_disabled:
+                            candidate = target
                         break
+            if candidate:
+                vision_alias = candidate
         if vision_alias and request_contains_image(data):
             logger.info(f"Image request -> {requested_model_id} (via /__proxy__) vision redirect to {vision_alias}")
             requested_model_id = vision_alias
 
-
-        # HANDLE MODEL REDIRECT AT THE ENTRY POINT - DIRECT AND CLEAR
-        final_model_name = requested_model_id  # Default to original if no redirect
-
-        # Check for exact match first
-        if requested_model_id in model_redirects:
-            redirected_to = model_redirects[requested_model_id]
-            logger.info(f"Exact redirect match: {requested_model_id} -> {redirected_to}")
-            final_model_name = redirected_to
-        else:
-            # Try case-insensitive match
-            requested_lower = requested_model_id.lower()
-            for original, target in model_redirects.items():
-                if original.lower() == requested_lower:
-                    redirected_to = target
-                    logger.info(f"Case-insensitive redirect match: {requested_model_id} -> {redirected_to}")
-                    final_model_name = redirected_to
-                    break
-            else:
-                # If no direct match, try removing prefix and matching
-                # Extract model name without prefix (part after the last '/')
-                if '/' in requested_model_id:
-                    bare_model_name = requested_model_id.split('/')[-1]
-                    bare_model_lower = bare_model_name.lower()
-
-                    # Try matching the bare model name
-                    for original, target in model_redirects.items():
-                        original_bare = original.split('/')[-1] if '/' in original else original
-                        if original_bare.lower() == bare_model_lower:
-                            redirected_to = target
-                            logger.info(f"Bare name redirect match: {requested_model_id} ({bare_model_name}) -> {redirected_to}")
-                            final_model_name = redirected_to
-                            break
-                        elif original.lower() == bare_model_lower:
-                            redirected_to = target
-                            logger.info(f"Bare name redirect match (original without prefix): {requested_model_id} ({bare_model_name}) -> {redirected_to}")
-                            final_model_name = redirected_to
-                            break
-
-        # Now determine the backend model name (original_id from cache)
-        backend_model_name = final_model_name  # Default to final_model_name if not in cache
-        routing_model_id = final_model_name  # Use this for routing lookup
-
-        # If final_model_name is in cache, get its original_id for backend
-        if final_model_name in cached_models:
-            backend_model_name = cached_models[final_model_name].get('original_id', final_model_name)
-            logger.info(f"Found in cache, using backend name: {final_model_name} -> {backend_model_name}")
-        else:
-            # Try to find if final_model_name matches an original_id in cache
-            found_in_cache_as_original = False
-            for cached_id, cached_model in cached_models.items():
-                if cached_model.get('original_id') == final_model_name:
-                    routing_model_id = cached_id  # Use cached_id for routing
-                    backend_model_name = final_model_name  # Keep as-is for backend
-                    logger.info(f"Found as original_id in cache: {final_model_name} (cached as {cached_id})")
-                    found_in_cache_as_original = True
-                    break
-
-            if not found_in_cache_as_original:
-                # Try case-insensitive match in cache
-                final_lower = final_model_name.lower()
-                for cached_id, cached_model in cached_models.items():
-                    if cached_id.lower() == final_lower or cached_model.get('original_id', '').lower() == final_lower:
-                        routing_model_id = cached_id
-                        backend_model_name = cached_model.get('original_id', cached_id)
-                        logger.info(f"Found via case-insensitive match: {final_model_name} -> {routing_model_id} -> {backend_model_name}")
-                        break
-                else:
-                    # If still no match, try removing prefix from the requested model name
-                    if '/' in final_model_name:
-                        bare_model_name = final_model_name.split('/')[-1]
-                        bare_model_lower = bare_model_name.lower()
-
-                        # Look for the bare name in cache
-                        for cached_id, cached_model in cached_models.items():
-                            cached_bare = cached_id.split('/')[-1] if '/' in cached_id else cached_id
-                            if cached_bare.lower() == bare_model_lower or cached_model.get('original_id', '').split('/')[-1].lower() == bare_model_lower:
-                                routing_model_id = cached_id
-                                backend_model_name = cached_model.get('original_id', cached_id)
-                                logger.info(f"Found via bare name match: {final_model_name} ({bare_model_name}) -> {routing_model_id} -> {backend_model_name}")
-                                break
-
-        logger.info(f"Model processing: {requested_model_id} -> {final_model_name} -> {backend_model_name}")
-
-        # Now find the appropriate endpoint for routing_model_id
-        selected_endpoint = None
-
-        # Check custom routing first
-        if routing_model_id in custom_model_routing:
-            custom_endpoint_prefix = custom_model_routing[routing_model_id]
-            # Find the endpoint configuration that matches this prefix
-            for endpoint in proxy_server.endpoints if 'proxy_server' in globals() and proxy_server else []:
-                if endpoint['proxy_path_prefix'] == custom_endpoint_prefix:
-                    selected_endpoint = endpoint
-                    logger.info(f"Using custom routing for {routing_model_id} -> {custom_endpoint_prefix}")
-                    break
-
-        if not selected_endpoint:
-            # Use default routing
-            endpoints_for_model = model_routing.get(routing_model_id, [])
-
-            # If no direct match, try case-insensitive match
-            if not endpoints_for_model:
-                for route_model in model_routing.keys():
-                    if route_model.lower() == routing_model_id.lower():
-                        endpoints_for_model = model_routing.get(route_model, [])
-                        logger.info(f"Using case-insensitive match for routing: {routing_model_id} -> {route_model}")
-                        break
-
-            if not endpoints_for_model:
-                return jsonify({"error": f"Model {routing_model_id} not found in any configured endpoint"}), 404
-
-            # Select the first endpoint (prioritized)
-            selected_endpoint = endpoints_for_model[0]
+        selected_endpoint, backend_model_name = resolve_model_route(requested_model_id)
+        if selected_endpoint is None:
+            log_server_error('router_error', f"Model {requested_model_id} not found in any configured endpoint",
+                             status=404, req=request, model=requested_model_id)
+            return jsonify({"error": f"Model {requested_model_id} not found in any configured endpoint"}), 404
 
         # At this point, we have:
         # - backend_model_name: the model name to send to the backend
@@ -1473,7 +1961,129 @@ def aggregated_chat_completions():
 
     except Exception as e:
         logger.error(f"Error in aggregated chat completions: {e}")
+        log_server_error('handler_exception', f"Aggregated chat completions failed: {e}",
+                         detail=traceback.format_exc(), status=500, req=request)
         return jsonify({"error": str(e)}), 500
+
+
+def _aggregated_by_model(upstream_path, label):
+    """Shared aggregator for model-routed JSON endpoints (embeddings, pooling).
+
+    Routes on the client-visible model and forwards the body to upstream_path on
+    the selected endpoint, reusing the proxy handler so the monitor still sees
+    the request.
+    """
+    try:
+        data = request.get_json()
+        requested_model_id = data.get('model')  # This is the model ID as sent in the request
+
+        if not requested_model_id:
+            return jsonify({"error": "Model is required"}), 400
+
+        # Enforce per-key / per-IP model visibility on the client-visible model
+        if not model_scope_allows(request, requested_model_id):
+            logger.warning(f"Access denied: model '{requested_model_id}' for client {request.remote_addr}")
+            log_server_error('router_error', f"Access denied: model '{requested_model_id}'",
+                             status=403, req=request, model=requested_model_id)
+            return jsonify({"error": f"Model '{requested_model_id}' is not available for your API key"}), 403
+
+        selected_endpoint, backend_model_name = resolve_model_route(requested_model_id)
+        if selected_endpoint is None:
+            log_server_error('router_error', f"Model {requested_model_id} not found in any configured endpoint",
+                             status=404, req=request, model=requested_model_id)
+            return jsonify({"error": f"Model {requested_model_id} not found in any configured endpoint"}), 404
+
+        logger.info(f"Routing {label} {requested_model_id} -> {backend_model_name} via {selected_endpoint['proxy_path_prefix']}")
+
+        # Set the final backend model name as an attribute for the proxy handler
+        request.original_model_id = backend_model_name
+        return proxy_server_instance.handle_proxy_request(
+            request, selected_endpoint, upstream_path, upstream_path=upstream_path)
+
+    except Exception as e:
+        logger.error(f"Error in aggregated {label}: {e}")
+        log_server_error('handler_exception', f"Aggregated {label} failed: {e}",
+                         detail=traceback.format_exc(), status=500, req=request)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/v1/embeddings', methods=['POST'])
+def aggregated_embeddings():
+    """Route embeddings requests to the appropriate endpoint based on model, reusing proxy logic for monitoring."""
+    return _aggregated_by_model('v1/embeddings', 'embeddings')
+
+
+@app.route('/v1/pooling', methods=['POST'])
+def aggregated_pooling_openai():
+    """OpenAI-style pooling: forwarded to the selected endpoint's /v1/pooling."""
+    return _aggregated_by_model('v1/pooling', 'pooling')
+
+
+@app.route('/pooling', methods=['POST'])
+def aggregated_pooling_native():
+    """llama.cpp-style pooling: forwarded to the selected endpoint's native /pooling."""
+    return _aggregated_by_model('pooling', 'pooling')
+
+
+def _aggregated_audio(subpath, json_body):
+    """Shared aggregator for /v1/audio/* endpoints.
+
+    TTS (audio/speech) carries the model in a JSON body; STT
+    (audio/transcriptions, audio/translations) carries it in the multipart
+    form together with the uploaded audio file.
+    """
+    try:
+        if json_body:
+            data = request.get_json(silent=True)
+            requested_model_id = data.get('model') if isinstance(data, dict) else None
+        else:
+            requested_model_id = request.form.get('model')
+
+        if not requested_model_id:
+            return jsonify({"error": "Model is required"}), 400
+
+        # Enforce per-key / per-IP model visibility on the client-visible model
+        if not model_scope_allows(request, requested_model_id):
+            logger.warning(f"Access denied: model '{requested_model_id}' for client {request.remote_addr}")
+            log_server_error('router_error', f"Access denied: model '{requested_model_id}'",
+                             status=403, req=request, model=requested_model_id)
+            return jsonify({"error": f"Model '{requested_model_id}' is not available for your API key"}), 403
+
+        selected_endpoint, backend_model_name = resolve_model_route(requested_model_id)
+        if selected_endpoint is None:
+            log_server_error('router_error', f"Model {requested_model_id} not found in any configured endpoint",
+                             status=404, req=request, model=requested_model_id)
+            return jsonify({"error": f"Model {requested_model_id} not found in any configured endpoint"}), 404
+
+        logger.info(f"Routing {subpath} {requested_model_id} -> {backend_model_name} via {selected_endpoint['proxy_path_prefix']}")
+
+        # Set the final backend model name as an attribute for the proxy handler
+        request.original_model_id = backend_model_name
+        return proxy_server_instance.handle_proxy_request(request, selected_endpoint, subpath)
+
+    except Exception as e:
+        logger.error(f"Error in aggregated {subpath}: {e}")
+        log_server_error('handler_exception', f"Aggregated {subpath} failed: {e}",
+                         detail=traceback.format_exc(), status=500, req=request)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/v1/audio/speech', methods=['POST'])
+def aggregated_audio_speech():
+    """Route TTS (text-to-speech) requests to the appropriate endpoint based on model."""
+    return _aggregated_audio('v1/audio/speech', json_body=True)
+
+
+@app.route('/v1/audio/transcriptions', methods=['POST'])
+def aggregated_audio_transcriptions():
+    """Route STT (speech-to-text / ASR) requests to the appropriate endpoint based on model."""
+    return _aggregated_audio('v1/audio/transcriptions', json_body=False)
+
+
+@app.route('/v1/audio/translations', methods=['POST'])
+def aggregated_audio_translations():
+    """Route audio translation requests to the appropriate endpoint based on model."""
+    return _aggregated_audio('v1/audio/translations', json_body=False)
 
 
 @socketio.on('disconnect')
@@ -1507,6 +2117,7 @@ def check_endpoint_health():
                     'is_static': bool(m.get('is_static')),
                     'owned_by': m.get('owned_by'),
                     'is_displayed': m.get('is_displayed', True),
+                    'max_model_len': m.get('max_model_len'),
                 })
         entry = {
             'proxy_path_prefix': prefix,
@@ -1521,13 +2132,17 @@ def check_endpoint_health():
         if not base.strip():
             result.append(entry)
             continue
-        # Probe the models endpoint
+        # Probe the models endpoint (include endpoint api_key so auth-gated
+        # backends like vLLM --api-key are not reported as down).
         import requests as _r
         from urllib.parse import urljoin as _urljoin
         url = _urljoin(base.rstrip('/') + '/', 'v1/models')
+        headers = {}
+        headers.update(resolve_api_key_headers(ep))
+        headers['User-Agent'] = 'OpenAI/JS 6.26.0'
         start = _time.time()
         try:
-            resp = _r.get(url, timeout=1.5)
+            resp = _r.get(url, headers=headers, timeout=1.5)
             entry['ok'] = resp.status_code == 200
             entry['error'] = f"HTTP {resp.status_code}" if resp.status_code != 200 else None
         except _r.exceptions.RequestException as e:
@@ -1677,8 +2292,39 @@ def handle_set_model_display(data):
     socketio.emit('models_updated', {
         'models': list(cached_models.values()),
         'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,  # NEW: Include redirects in the response
+        'redirects': model_redirects,
         'message': f'Display setting updated for {model_id}: {is_displayed}'
+    })
+
+
+@socketio.on('set_models_display_batch')
+def handle_set_models_display_batch(data):
+    """Batch-persist block/unblock state for many models with a single config save."""
+    from flask_socketio import emit
+    model_ids = data.get('model_ids') or []
+    is_displayed = bool(data.get('is_displayed', False))
+    if not isinstance(model_ids, list):
+        emit('error', {'message': 'model_ids must be a list'})
+        return
+
+    changed = 0
+    for model_id in model_ids:
+        if not isinstance(model_id, str) or not model_id.strip():
+            continue
+        model_id = model_id.strip()
+        model_display_settings[model_id] = is_displayed
+        if model_id in cached_models:
+            cached_models[model_id]['is_displayed'] = is_displayed
+        changed += 1
+
+    if changed:
+        save_model_display_settings()
+
+    socketio.emit('models_updated', {
+        'models': list(cached_models.values()),
+        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
+        'redirects': model_redirects,
+        'message': f'Batch display update applied to {changed} models'
     })
 
 
@@ -1731,7 +2377,7 @@ def handle_save_vision_redirect(data):
 
 @socketio.on('load_vision_redirects')
 def handle_load_vision_redirects():
-    socketio.emit('vision_redirects_update', {'vision_redirects': model_vision_redirects})
+    socketio.emit('vision_redirects_update', {'vision_redirects': model_vision_redirects, 'vision_disabled': sorted(model_vision_disabled)})
 
 
 
@@ -2036,6 +2682,7 @@ def fetch_models_from_provider(provider_endpoint):
                                     'is_displayed': model_display_settings.get(final_model_id, existing_display_setting),  # Apply saved display setting
                                     'redirect_to': model_redirects.get(final_model_id)  # NEW: Include redirect info
                                 }
+                                _carry_model_extras(cached_models[final_model_id], model_obj)
                 else:
                     # Fetch models from the upstream API
                     proxy_prefix = endpoint['proxy_path_prefix']
@@ -2123,6 +2770,7 @@ def fetch_models_from_provider(provider_endpoint):
                                             'is_displayed': model_display_settings.get(final_model_id, existing_display_setting),  # Apply saved display setting
                                             'redirect_to': model_redirects.get(final_model_id)  # NEW: Include redirect info
                                         }
+                                    _carry_model_extras(cached_models[final_model_id], model)
             except Exception as e:
                 import traceback
                 logger.error(f"Error fetching models from {provider_endpoint}: {e}")
@@ -2244,7 +2892,7 @@ def load_model_redirects():
 
 def load_model_vision_redirects():
     """Load image-to-vision model redirects from the proxy config file."""
-    global model_vision_redirects
+    global model_vision_redirects, model_vision_disabled
     try:
         config = read_config_file()
 
@@ -2253,11 +2901,137 @@ def load_model_vision_redirects():
             logger.info(f"Loaded {len(model_vision_redirects)} model vision redirects from config")
         else:
             logger.info("No model vision redirects found in config, using defaults")
+        # Disabled toggles: entries configured but switched off in the UI
+        disabled = config.get('model_vision_disabled', [])
+        model_vision_disabled = set(disabled) if isinstance(disabled, list) else set()
     except Exception as e:
         import traceback
         logger.error(f"Error loading model vision redirects: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         model_vision_redirects = {}
+
+
+# ---------------------------------------------------------------------------
+# Per-key / per-IP model visibility rules
+#
+# Config section (proxy_config.json):
+#   "model_access_rules": [
+#     {
+#       "name": "guest-client",          # optional, for the monitor log only
+#       "api_keys": ["sk-xxxx"],         # match on incoming "Authorization: Bearer <key>" (or x-api-key)
+#       "ips": ["192.0.2.23", "10.0.0.0/8"],  # exact IP or CIDR
+#       "models": ["GLM/*", "kimi-k2.5"] # allowlist, supports * wildcards, case-insensitive
+#     }
+#   ]
+#
+# Semantics: a rule matches when the request's key is listed OR the client IP
+# matches. The effective scope is the UNION of all matching rules' models
+# patterns. Clients that match no rule keep the default "see everything".
+# The scope is enforced on the model list AND on chat completions (403).
+# ---------------------------------------------------------------------------
+
+def load_model_access_rules():
+    """Load per-key / per-IP model visibility rules from the config file."""
+    global model_access_rules
+    try:
+        config = read_config_file()
+        rules = config.get('model_access_rules') or []
+        model_access_rules = rules if isinstance(rules, list) else []
+        if model_access_rules:
+            logger.info(f"Loaded {len(model_access_rules)} model access rules from config")
+        else:
+            logger.info("No model access rules in config, all clients unrestricted")
+    except Exception as e:
+        logger.error(f"Error loading model access rules: {e}")
+        model_access_rules = []
+
+
+def _client_api_key(req):
+    """Extract the client-presented API key (Bearer token or x-api-key)."""
+    auth = req.headers.get('Authorization', '')
+    if auth.lower().startswith('bearer '):
+        return auth[7:].strip()
+    return (req.headers.get('X-Api-Key') or '').strip()
+
+
+def _ip_in_list(ip, candidates):
+    """Match an IP against a list of exact addresses or CIDR networks."""
+    if not ip:
+        return False
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for raw in candidates or []:
+        raw = str(raw).strip()
+        if not raw:
+            continue
+        try:
+            if '/' in raw:
+                if addr in ipaddress.ip_network(raw, strict=False):
+                    return True
+            elif addr == ipaddress.ip_address(raw):
+                return True
+        except ValueError:
+            if raw == ip:  # tolerate malformed entries by falling back to string compare
+                return True
+    return False
+
+
+def _model_matches_any_pattern(model_id, patterns):
+    """Case-insensitive match of a model id against allowlist patterns.
+
+    Supports '*' wildcards and a bare-name fallback so "kimi-k2.5" matches
+    the full id "Kimi/kimi-k2.5" too.
+    """
+    mid = str(model_id or '').lower()
+    bare = mid.split('/')[-1] if '/' in mid else mid
+    for pat in patterns:
+        pat_l = str(pat).strip().lower()
+        if not pat_l:
+            continue
+        if pat_l == '*' or fnmatch.fnmatch(mid, pat_l) or fnmatch.fnmatch(bare, pat_l):
+            return True
+    return False
+
+
+def get_model_access_scope(req):
+    """Return the model allowlist patterns for this client, or None if unrestricted."""
+    if not model_access_rules:
+        return None
+    api_key = _client_api_key(req)
+    ip = req.remote_addr or ''
+    matched = False
+    patterns = []
+    for rule in model_access_rules:
+        if not isinstance(rule, dict):
+            continue
+        keys = [k.strip() for k in (rule.get('api_keys') or []) if isinstance(k, str) and k.strip()]
+        key_match = bool(api_key) and api_key in keys
+        ip_match = bool(rule.get('ips')) and _ip_in_list(ip, rule.get('ips') or [])
+        if not key_match and not ip_match:
+            continue
+        matched = True
+        patterns.extend(m for m in (rule.get('models') or []) if m)
+    return patterns if matched else None
+
+
+def model_scope_allows(req, model_id):
+    """Check whether the requesting client may use model_id."""
+    patterns = get_model_access_scope(req)
+    if patterns is None:
+        return True
+    return _model_matches_any_pattern(model_id, patterns)
+
+
+def filter_models_for_request(req, models):
+    """Filter a list of model dicts (or id strings) by the requester's scope."""
+    models = list(models)
+    patterns = get_model_access_scope(req)
+    if patterns is None:
+        return models
+    return [m for m in models
+            if _model_matches_any_pattern(m.get('id') if isinstance(m, dict) else m, patterns)]
 
 
 def request_contains_image(data):
@@ -2285,17 +3059,28 @@ def request_contains_image(data):
 
 
 def set_vision_redirect(original_model, target_model):
-    """Set (or clear) a vision redirect from original_model to target_model."""
+    """Set, disable, or clear a vision redirect for original_model.
+
+    The redirect entry always stays in config so the admin UI can toggle it
+    later without re-entering the target:
+      - target non-empty  -> enabled, requests with images rewrite to target
+      - target empty/None -> disabled (entry + remembered target kept)
+    """
     if target_model is None or target_model == '':
-        model_vision_redirects.pop(original_model, None)
-        logger.info(f"Cleared vision redirect for {original_model}")
+        # Disabled: keep the entry/remembered target, mark it disabled.
+        if original_model not in model_vision_redirects:
+            model_vision_redirects[original_model] = ""
+        model_vision_disabled.add(original_model)
+        logger.info(f"Disabled vision redirect for {original_model} (target remembered)")
     else:
         model_vision_redirects[original_model] = target_model
+        model_vision_disabled.discard(original_model)
         logger.info(f"Set vision redirect: {original_model} -> {target_model}")
 
     try:
         config = read_config_file()
         config['model_vision_redirects'] = model_vision_redirects
+        config['model_vision_disabled'] = sorted(model_vision_disabled)
         write_config_file(config)
         logger.info("Vision redirects saved to config")
     except Exception as e:
@@ -2366,7 +3151,8 @@ def load_target_model_configs():
 
 def apply_config(config, broadcast=True):
     """Apply a parsed config to the live in-memory proxy state (hot reload)."""
-    global model_display_settings, custom_model_routing, model_redirects
+    global model_display_settings, custom_model_routing, model_redirects, model_access_rules
+    global model_vision_redirects, model_vision_disabled
     proxy = globals().get('proxy_server')
     if proxy is None:
         return
@@ -2382,6 +3168,14 @@ def apply_config(config, broadcast=True):
     model_display_settings = config.get('model_display_settings', {})
     custom_model_routing = config.get('model_routing_settings', {})
     model_redirects = config.get('model_redirects', {})
+    # Sync vision redirects too, otherwise a toggle turned off in the admin UI
+    # (or an external config edit) keeps redirecting image requests server-side.
+    vr = config.get('model_vision_redirects', {})
+    model_vision_redirects = vr if isinstance(vr, dict) else {}
+    vd = config.get('model_vision_disabled', [])
+    model_vision_disabled = set(vd) if isinstance(vd, list) else set()
+    rules = config.get('model_access_rules', [])
+    model_access_rules = rules if isinstance(rules, list) else []
     _config_state['last_loaded_content'] = json.loads(json.dumps(config))
 
     logger.info("Config applied to runtime (real-time sync)")
@@ -2575,10 +3369,14 @@ if __name__ == '__main__':
     load_model_routing_settings()
     load_model_redirects()  # NEW: Load model redirects
     load_model_vision_redirects()  # NEW: Load model vision redirects
+    load_model_access_rules()  # Load per-key / per-IP model visibility rules
     load_target_model_configs()  # NEW: Load target model configurations
     load_endpoint_target_configs()  # NEW: Load endpoint target configurations
 
     # Fetch all models on startup
     fetch_all_models()
+
+    # Ray 负载历史采样线程
+    start_ray_history_sampler()
 
     proxy_server.run(host='0.0.0.0')

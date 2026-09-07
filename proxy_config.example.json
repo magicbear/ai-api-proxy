@@ -1,0 +1,50 @@
+{
+  "port": 16900,
+  "ray_dashboard": "http://127.0.0.1:8265",
+  "endpoints": [
+    {
+      "proxy_path_prefix": "/bailian",
+      "target_base_url": "https://dashscope.aliyuncs.com/v1/",
+      "api_key": "sk-your-api-key",
+      "api_key_header": "Authorization",
+      "api_key_prefix": "Bearer "
+    },
+    {
+      "proxy_path_prefix": "/local-vllm",
+      "target_base_url": "http://127.0.0.1:8000/",
+      "api_key": "",
+      "models": [
+        "model-a",
+        "model-b"
+      ]
+    }
+  ],
+  "prefix_map": [
+    ["grok", "Grok"],
+    ["deepseek", "Deepseek"],
+    ["qwen", "Qwen"],
+    ["glm", "GLM"]
+  ],
+  "model_display_settings": {
+    "model-a": true,
+    "model-b": false
+  },
+  "model_routing_settings": {
+    "model-a": "/local-vllm"
+  },
+  "model_redirects": {
+    "model-alias": "model-a"
+  },
+  "model_vision_redirects": {
+    "model-a": "model-a-vision"
+  },
+  "model_vision_disabled": [],
+  "model_access_rules": [
+    {
+      "name": "guest-client",
+      "api_keys": ["sk-guest-key"],
+      "ips": ["127.0.0.1", "10.0.0.0/8"],
+      "models": ["model-a", "model-*"]
+    }
+  ]
+}

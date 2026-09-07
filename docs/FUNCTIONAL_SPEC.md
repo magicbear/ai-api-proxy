@@ -15,14 +15,14 @@ AI API Proxy 是一个高度可配置的代理服务器，旨在统一多个 AI 
     "endpoints": [
       {
         "proxy_path_prefix": "/xai",
-        "target_base_url": "http://192.168.32.253/grok/",
+        "target_base_url": "http://192.0.2.253/grok/",
         "api_key_header": "Authorization",
         "api_key_prefix": "Bearer ",
         "api_key_env": "BAILIAN_API_KEY"
       },
       {
         "proxy_path_prefix": "/bailian",
-        "target_base_url": "http://192.168.32.253/bailian/",
+        "target_base_url": "http://192.0.2.253/bailian/",
         "api_key_header": "",
         "api_key_prefix": "",
         "api_key_env": "",
@@ -51,6 +51,12 @@ AI API Proxy 是一个高度可配置的代理服务器，旨在统一多个 AI 
 - **连接追踪**: 显示所有活跃连接的状态、来源和持续时间
 - **流数据监控**: 实时显示流式响应的内容
 - **令牌统计**: 按提供商分类统计令牌使用情况
+
+### 2.3.1 推理性能测试
+- **零配置**: 测试入口、模型列表、API Key 均取自代理配置，无需填写接口信息
+- **两种入口**: 聚合路由 `/v1/chat/completions`，或直连某个端点 `/<prefix>/v1/chat/completions`（代理自动注入该端点密钥）
+- **指标**: 预填充耗时/速度、输出耗时/速度、并发总吞吐量，优先采用上游返回的 `usage` token 数
+- **导出**: 折线图 PNG、CSV、Markdown 报告，硬件信息可从 Ray 集群自动填充
 
 ### 2.4 智能路由机制
 - **模型路由**: 根据模型名称自动选择合适的后端

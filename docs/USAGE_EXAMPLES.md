@@ -125,7 +125,7 @@ curl -X POST http://your-server:16900/v1/chat/completions \
 ```json
 {
   "proxy_path_prefix": "/bailian",
-  "target_base_url": "http://192.168.32.253/bailian/",
+  "target_base_url": "http://192.0.2.253/bailian/",
   "models": [
     "qwen3.5-plus",
     "qwen3-max-2026-01-23",

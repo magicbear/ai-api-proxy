@@ -20,7 +20,13 @@ pip install -r requirements.txt
 ## 2. 配置设置
 
 ### 2.1 配置文件
-编辑 `proxy_config.json` 文件，根据您的需求配置端点：
+复制示例配置并按需修改：
+
+```bash
+cp proxy_config.example.json proxy_config.json
+```
+
+然后编辑 `proxy_config.json`，根据您的需求配置端点（完整字段说明见 `README.md`）：
 
 ```json
 {
@@ -28,9 +34,9 @@ pip install -r requirements.txt
     {
       "proxy_path_prefix": "/my-provider",
       "target_base_url": "https://api.provider.com/v1/",
+      "api_key": "your-api-key",
       "api_key_header": "Authorization",
-      "api_key_prefix": "Bearer ",
-      "api_key_env": "MY_PROVIDER_API_KEY"
+      "api_key_prefix": "Bearer "
     }
   ],
   "port": 16900,
@@ -40,11 +46,13 @@ pip install -r requirements.txt
 }
 ```
 
+> 注意：`proxy_config.json` 包含密钥等隐私信息，已被 `.gitignore` 排除，不会提交到仓库。
+
 ### 2.2 环境变量
-设置必要的环境变量：
+本代理直接在配置文件中存放端点密钥（`api_key` 字段），无需额外设置环境变量。如需自定义配置文件路径，可设置 `CONFIG_PATH`：
 
 ```bash
-export MY_PROVIDER_API_KEY="your-api-key-here"
+export CONFIG_PATH="/path/to/proxy_config.json"
 ```
 
 ## 3. 启动服务
@@ -79,7 +87,7 @@ User=your-user
 WorkingDirectory=/path/to/ai-api-proxy
 ExecStart=/usr/bin/python3 /path/to/ai-api-proxy/proxy_server.py
 Restart=always
-Environment=MY_PROVIDER_API_KEY=your-api-key-here
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target

@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/data/clawdata/dev/proj/api-proxy
+WorkingDirectory=/opt/api-proxy
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /data/clawdata/dev/proj/api-proxy/proxy_server.py
+ExecStart=/usr/bin/python3 /opt/api-proxy/proxy_server.py
 Restart=always
 RestartSec=5
 
@@ -20,7 +20,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 
 # Network settings
-ReadWritePaths=/data/clawdata/dev/proj/api-proxy
+ReadWritePaths=/opt/api-proxy
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 
 [Install]

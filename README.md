@@ -1,110 +1,125 @@
-# OpenAI-Compatible API Proxy
+# AI API Proxy
 
-A flexible proxy server that maps custom endpoints to OpenAI-compatible APIs (like Alibaba Cloud's DashScope) with real-time monitoring capabilities.
+A highly configurable, OpenAI-compatible API proxy that unifies multiple AI model
+providers behind a single entry point, with real-time monitoring, usage statistics,
+and inference performance testing.
+
+> 中文文档：[README_zh.md](README_zh.md)
 
 ## Features
 
-- Map custom paths to target API endpoints (e.g., `/bailian/chat/completions` → `https://dashscope.aliyuncs.com/v1/chat/completions`)
-- Support for multiple endpoints
-- Streaming response handling with real-time monitoring
-- Web interface to monitor active connections and stream data
-- WebSocket-based live updates
-- Automatic modification of requests to include `stream_options.include_usage`
+- **Multi-endpoint proxying** — map custom path prefixes (e.g. `/bailian`,
+  `/local-vllm`) to any OpenAI-compatible backend
+- **Aggregated endpoints** — unified `/v1/models` and `/v1/chat/completions`
+  that route by model name across all backends
+- **Model management** — display toggles, per-model routing, name redirects,
+  and vision-model redirects
+- **Per-key / per-IP access rules** — control which models each API key or
+  client IP can see (wildcard support)
+- **Real-time monitoring dashboard** — active connections, live stream data,
+  and token usage stats via WebSocket
+- **Inference performance testing** — benchmark endpoints directly from the
+  monitor UI (prefill/output latency & throughput, PNG/CSV/Markdown export,
+  optional Ray cluster hardware auto-fill)
+- **ccusage token statistics** — daily usage breakdown powered by
+  [ccusage](https://github.com/ryoppippi/ccusage)
 
-## Installation
+## Quick Start
 
-1. Install dependencies:
 ```bash
 pip install -r requirements.txt
-```
-
-2. Configure the proxy by editing `proxy_config.json`:
-```json
-{
-  "endpoints": [
-    {
-      "proxy_path_prefix": "/bailian/chat/completions",
-      "target_base_url": "https://dashscope.aliyuncs.com/v1/chat/completions",
-      "api_key_header": "Authorization",
-      "api_key_prefix": "Bearer ",
-      "api_key_env": "BAILIAN_API_KEY"
-    }
-  ],
-  "port": 16900
-}
-```
-
-3. Set your API keys as environment variables:
-```bash
-export BAILIAN_API_KEY="your-bailian-key"
-export QWEN_API_KEY="your-qwen-key"
-export OPENAI_API_KEY="your-openai-key"
-```
-
-4. Start the server:
-```bash
+cp proxy_config.example.json proxy_config.json   # then edit it
 python proxy_server.py
 ```
 
-## Usage
+- Proxy: `http://0.0.0.0:16900` (port configurable)
+- Monitor dashboard: `http://localhost:16900/monitor`
 
-- Proxy server runs on port 16900 (configurable), bound to 0.0.0.0
-- Monitor interface available at `http://YOUR_SERVER_IP:16900/monitor` (same port)
-- Make requests to your mapped endpoints (e.g., `POST http://YOUR_SERVER_IP:16900/bailian/chat/completions`)
+`proxy_config.json` contains your keys and is excluded via `.gitignore` —
+always edit it locally.
 
-## Configuration Options
+## Configuration
 
-The proxy reads from `proxy_config.json` with the following structure:
+The proxy reads `proxy_config.json` (path overridable via the `CONFIG_PATH`
+environment variable). Full annotated example: [`proxy_config.example.json`](proxy_config.example.json).
 
-- `endpoints`: Array of endpoint mappings
-  - `proxy_path_prefix`: Base path on the proxy server (e.g., `/bailian`)
-  - `target_base_url`: Base URL of the target API (e.g., `https://dashscope.aliyuncs.com/v1/`)
-  - `api_key_header`: Header name for API key (default: Authorization)
-  - `api_key_prefix`: Prefix for API key value (default: Bearer )
-  - `api_key_env`: Name of environment variable containing the API key
-  - `models`: Optional static models array for the endpoint
-- `port`: Port for both the proxy server and monitoring interface
+```jsonc
+{
+  "port": 16900,                              // proxy + monitor port
+  "ray_dashboard": "http://127.0.0.1:8265",   // optional: Ray dashboard for perf-test hardware info
 
-## How It Works
+  "endpoints": [
+    {
+      "proxy_path_prefix": "/bailian",        // exposed path prefix
+      "target_base_url": "https://dashscope.aliyuncs.com/v1/",
+      "api_key": "sk-your-api-key",           // sent as "Authorization: Bearer <key>" by default
+      "api_key_header": "Authorization",      // optional override
+      "api_key_prefix": "Bearer ",            // optional override ("" = no prefix)
+      "models": ["model-a", "model-b"]        // optional static model list
+    }
+  ],
 
-1. The proxy receives requests at configured paths
-2. It forwards requests to the target API, adding authentication headers
-3. For streaming requests, it modifies the request body to include `stream_options.include_usage: true`
-4. Real-time information is broadcast via WebSocket to monitoring clients
-5. The web interface displays active connections and streaming data
-6. Supports aggregated endpoints at `/v1/chat/completions` and `/v1/models` that route to appropriate backends
+  // Model-name prefix classification: substring match, case-insensitive.
+  // Used to group models by provider in the aggregated views.
+  "prefix_map": [["grok", "Grok"], ["deepseek", "Deepseek"]],
 
-## Environment Variables
+  // Hide/show models in the aggregated /v1/models list
+  "model_display_settings": { "model-a": true, "model-b": false },
 
-- `BAILIAN_API_KEY`: Authentication key for Bailian API
-- `QWEN_API_KEY`: Authentication key for Qwen API
-- `OPENAI_API_KEY`: Authentication key for OpenAI API
-- `CONFIG_PATH`: Path to config file (default: ./proxy_config.json)
+  // Pin a model to a specific endpoint prefix
+  "model_routing_settings": { "model-a": "/local-vllm" },
+
+  // Rewrite a requested model name before forwarding upstream
+  "model_redirects": { "model-alias": "model-a" },
+
+  // Route vision-capable requests to a different model
+  "model_vision_redirects": { "model-a": "model-a-vision" },
+  "model_vision_disabled": ["model-a"],
+
+  // Which models each key/IP may call (allowlist, * wildcards, case-insensitive)
+  "model_access_rules": [
+    {
+      "name": "guest-client",                 // optional, shown in monitor logs only
+      "api_keys": ["sk-guest-key"],           // matches Authorization Bearer or x-api-key
+      "ips": ["127.0.0.1", "10.0.0.0/8"],     // exact IP or CIDR
+      "models": ["model-a", "model-*"]
+    }
+  ]
+}
+```
+
+## API Endpoints
+
+| Route | Description |
+| --- | --- |
+| `/v1/models` | Aggregated model list from all endpoints |
+| `/v1/chat/completions` | Unified chat completions, routed by model name |
+| `/v1/embeddings` | Embeddings proxy |
+| `/v1/audio/*` | Speech / transcriptions / translations proxy |
+| `/<prefix>/v1/...` | Direct access to a specific endpoint |
+| `/monitor` | Web monitoring dashboard |
+| `/ccusage` | ccusage-based daily token usage statistics |
+| `/ray_status` | Ray cluster status (used by the performance test page) |
+
+## Documentation
+
+| Document | Description |
+| --- | --- |
+| [docs/FUNCTIONAL_SPEC.md](docs/FUNCTIONAL_SPEC.md) | Functional specification (Chinese) |
+| [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md) | Deployment guide: systemd, screen, nginx (Chinese) |
+| [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) | Project layout & config reference (Chinese) |
+| [docs/USAGE_EXAMPLES.md](docs/USAGE_EXAMPLES.md) | Usage examples (Chinese) |
+| [docs/SCREENSHOTS.md](docs/SCREENSHOTS.md) | Monitor UI screenshots (Chinese) |
 
 ## Architecture
 
-- `proxy_server.py`: Main proxy server with WebSocket broadcasting
-- `proxy_config.json`: Endpoint configuration
-- `monitor.html`: Web interface for monitoring
-- `requirements.txt`: Dependencies
+- `proxy_server.py` — Flask + Flask-SocketIO server: routing, model management,
+  monitor broadcast, performance testing
+- `monitor.html` — single-file monitoring dashboard UI
+- `proxy_config.json` — live configuration (not committed)
+- `proxy_config.example.json` — committed config template
+- `requirements.txt` — Python dependencies
 
-## Advanced Features
+## License
 
-### Model Routing
-The proxy supports dynamic model routing, allowing you to:
-- View all available models from all configured endpoints
-- Route specific models to specific backends
-- Hide/show models in the aggregated `/v1/models` endpoint
-- Set up model redirects to map one model name to another
-
-### Monitoring Dashboard
-Access the monitoring dashboard at `http://YOUR_SERVER_IP:16900/monitor` to:
-- View active connections and their details
-- Monitor streaming requests in real-time
-- Track token usage by provider
-- Configure model routing and display settings
-
-### Aggregated Endpoints
-The proxy provides unified endpoints:
-- `/v1/models`: Returns models from all configured endpoints
-- `/v1/chat/completions`: Routes to the appropriate backend based on the model name
+MIT License

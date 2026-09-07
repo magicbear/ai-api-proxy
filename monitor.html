@@ -234,6 +234,11 @@
             white-space: pre-wrap; word-break: break-word;
         }
 
+        /* ---------- Live flow animation ---------- */
+        .flow-anim-wrap { position: relative; height: 230px; }
+        .flow-anim-wrap canvas { display: block; width: 100%; height: 100%; }
+        @media (max-width: 760px) { .flow-anim-wrap { height: 190px; } }
+
         /* ---------- Table ---------- */
         .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
         .tbl th {
@@ -248,6 +253,15 @@
         .tbl .num { font-weight: 700; }
 
         /* ---------- ccusage (monthly/daily folding) ---------- */
+        .ccu-refresh-progress {
+            font-size: 11.5px;
+            color: var(--amber);
+            min-width: 0;
+            animation: ccu-pulse 1.2s ease-in-out infinite;
+        }
+        .ccu-refresh-progress:empty { display: none; animation: none; }
+        @keyframes ccu-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+        .btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
         .ccu-month {
             border: 1px solid var(--border);
             border-radius: 10px;
@@ -533,7 +547,6 @@
         .lane-node.alias { background: rgba(99,102,241,.18); border-color: var(--accent); color: #fff; }
         .lane-node.model { background: rgba(139,92,246,.14); border-color: var(--accent-2); }
         .lane-node.endpoint { background: rgba(96,165,250,.14); border-color: var(--blue); }
-        .lane-node.backend { background: rgba(52,211,153,.12); border-color: var(--green); }
         .lane-node.missing { background: rgba(248,113,113,.12); border-color: var(--red); color: var(--red); }
 
         /* Vision-aware group: encloses the whole alias flow (main redirect +
@@ -627,6 +640,94 @@
         .lane-node select option, .lane-node select optgroup {
             background: var(--panel-2); color: var(--text); font-size: 12px;
         }
+        /* ---------- Searchable dropdown (combobox) ---------- */
+        .sselect { position: relative; flex: 0 1 auto; min-width: 190px; max-width: 300px; }
+        .sselect-toggle {
+            width: 100%; box-sizing: border-box; padding: 6px 24px 6px 10px;
+            border-radius: 8px; background: var(--panel-2); border: 1px solid var(--border);
+            color: var(--text); font-size: 12px; outline: none; cursor: pointer;
+            text-overflow: ellipsis; font-family: inherit;
+        }
+        .sselect-toggle:focus { border-color: var(--accent); cursor: text; }
+        .sselect::after {
+            content: '▾'; position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+            color: var(--text-dim); pointer-events: none; font-size: 11px;
+        }
+        .sselect-menu {
+            display: none; position: fixed; z-index: 60;
+            max-height: 260px; overflow-y: auto; min-width: 220px;
+            background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,.45);
+        }
+        .sselect.open .sselect-menu { display: block; }
+        .sselect-opt {
+            padding: 6px 12px; font-size: 12px; color: var(--text);
+            cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .sselect-opt:hover { background: rgba(139,92,246,.15); }
+        .sselect-opt.sel { color: var(--accent); font-weight: 700; }
+        .sselect-group {
+            padding: 5px 10px 3px; font-size: 10.5px; font-weight: 700; color: var(--text-faint);
+            border-top: 1px solid var(--border); margin-top: 2px;
+        }
+        .sselect-group:first-child { border-top: none; margin-top: 0; }
+        .sselect-empty { padding: 8px 10px; font-size: 12px; color: var(--text-faint); }
+
+        /* ---------- Server error log ---------- */
+        .err-badge {
+            display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 4px;
+            border-radius: 999px; background: var(--red); color: #fff;
+            font-size: 10.5px; font-weight: 700; line-height: 16px; text-align: center; vertical-align: 1px;
+        }
+        .err-card {
+            margin: 0 10px 10px; border: 1px solid var(--border); border-radius: 10px;
+            background: var(--panel); padding: 10px 12px;
+        }
+        .err-head { display: flex; align-items: center; gap: 8px; cursor: pointer; flex-wrap: wrap; }
+        .err-kind {
+            font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; flex-shrink: 0;
+            background: rgba(248,113,113,.15); color: var(--red);
+        }
+        .err-kind.upstream_timeout, .err-kind.router_error { background: rgba(251,191,36,.15); color: var(--amber); }
+        .err-status { font-size: 11px; font-weight: 700; color: var(--red); flex-shrink: 0; }
+        .err-msg { font-size: 12.5px; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .err-time { font-size: 11px; color: var(--text-faint); flex-shrink: 0; }
+        .err-meta { font-size: 11px; color: var(--text-dim); margin-top: 6px; word-break: break-all; }
+        .err-detail {
+            display: none; margin: 8px 0 0; padding: 10px; background: var(--bg-soft); border-radius: 8px;
+            font-size: 11.5px; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto;
+        }
+        .err-card.open .err-detail { display: block; }
+        .err-card.open .err-msg { white-space: normal; }
+
+        /* ---------- Ray cluster server status ---------- */
+        .ray-section-title { font-weight: 700; font-size: 13px; margin: 6px 10px 10px; }
+        .ray-usage { margin: 0 10px 16px; }
+        .ray-usage-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+        .ray-usage-label { width: 280px; flex-shrink: 0; word-break: break-all; color: var(--text); }
+        .ray-usage-val { flex-shrink: 0; color: var(--text-dim); font-size: 11.5px; }
+        .ray-nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); gap: 12px; margin: 0 10px; }
+        .ray-node-card { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); padding: 12px; }
+        .ray-node-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13.5px; }
+        .ray-ip { color: var(--text-dim); font-size: 11.5px; }
+        .ray-stat-row { display: flex; align-items: center; gap: 8px; font-size: 11.5px; margin: 6px 0; }
+        .ray-stat-row > span:first-child { white-space: nowrap; color: var(--text); flex-shrink: 0; }
+        .ray-gpus { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; margin-top: 10px; }
+        .ray-gpu { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--panel-2); }
+        .ray-gpu-title { font-size: 11px; color: var(--text-dim); margin-bottom: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ray-gpu-idx { color: var(--accent); font-weight: 700; margin-right: 5px; }
+        .ray-gpu-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 11px; }
+        .ray-gpu-row .ray-gpu-label { width: 42px; flex-shrink: 0; color: var(--text-dim); }
+        .ray-gpu-row .ray-gpu-val {
+            width: 118px; flex-shrink: 0; text-align: right; color: var(--text);
+            font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .ray-gpu-stats { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 7px; }
+        .ray-gpu-stats span {
+            background: rgba(255,255,255,.05); border-radius: 999px; padding: 1px 8px;
+            font-size: 10.5px; color: var(--text-dim);
+        }
+        .ray-gpu-bar { display: flex; }
 
         .flow-tools {
             display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
@@ -684,7 +785,76 @@
             max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
         }
         .ep-model.hidden { opacity: .45; }
+        .ep-model.blocked { opacity: .38; text-decoration: line-through; }
+        .ep-model .ep-block-btn {
+            display: inline-block; margin-left: 6px; padding: 0 5px;
+            border: none; border-radius: 999px; background: rgba(255,255,255,.09);
+            color: var(--text-dim); font-size: 10.5px; line-height: 15px; cursor: pointer;
+            font-family: inherit; vertical-align: 1px;
+        }
+        .ep-model .ep-block-btn:hover { background: rgba(248,113,113,.22); color: var(--red); }
+        .ep-model.blocked .ep-block-btn:hover { background: rgba(52,211,153,.22); color: var(--green); }
+        .ep-mml { color: var(--text-faint); font-weight: 500; }
         .ep-empty { font-size: 12px; color: var(--text-faint); padding: 6px 2px; }
+
+        /* ---------- Perf test (推理性能测试) ---------- */
+        .perf-wrap { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+        @media (max-width: 1100px) { .perf-wrap { grid-template-columns: 1fr; } }
+        .perf-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+        .perf-form { display: flex; flex-direction: column; gap: 12px; }
+        .perf-group { border-top: 1px solid var(--border-soft); padding-top: 12px; }
+        .perf-group:first-child { border-top: none; padding-top: 0; }
+        .perf-group-title {
+            font-size: 11.5px; font-weight: 700; letter-spacing: .6px;
+            text-transform: uppercase; color: var(--text-dim); margin-bottom: 9px;
+        }
+        .perf-field { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
+        .perf-field:last-child { margin-bottom: 0; }
+        .perf-field label { flex: 0 0 92px; font-size: 12px; color: var(--text-dim); }
+        .perf-input, .perf-select, .perf-area {
+            flex: 1 1 auto; min-width: 0;
+            background: #0d121d; border: 1px solid var(--border); color: var(--text);
+            border-radius: 8px; padding: 7px 9px; font-size: 12.5px; font-family: inherit;
+        }
+        .perf-input:focus, .perf-select:focus, .perf-area:focus { outline: none; border-color: var(--accent); }
+        .perf-select { cursor: pointer; }
+        .perf-area { width: 100%; font-family: "SF Mono", Consolas, monospace; font-size: 11.5px; resize: vertical; }
+        .perf-hint { font-size: 11px; color: var(--text-faint); line-height: 1.7; margin-top: 6px; }
+        .perf-hint b { color: var(--text-dim); font-weight: 600; }
+        .perf-url { font-family: "SF Mono", Consolas, monospace; color: var(--amber); word-break: break-all; }
+        .perf-summary { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
+        .perf-summary b { color: var(--text); font-weight: 600; }
+        .perf-charts { display: flex; flex-direction: column; gap: 12px; }
+        .perf-chart { width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 10px; background: #0d121d; }
+        .perf-run { color: var(--amber); animation: ccu-pulse 1.2s ease-in-out infinite; }
+        .perf-tbl-wrap { overflow-x: auto; margin-top: 12px; }
+        .perf-tbl-wrap .tbl th, .perf-tbl-wrap .tbl td { padding: 8px 10px; white-space: nowrap; }
+        .perf-mini-btn {
+            border: 1px solid var(--border); background: var(--panel-2); color: var(--text-dim);
+            border-radius: 6px; padding: 3px 9px; font-size: 11px; cursor: pointer;
+        }
+        .perf-mini-btn:hover { border-color: var(--accent); color: var(--text); }
+        .perf-modal {
+            position: fixed; inset: 0; z-index: 60; padding: 24px;
+            background: rgba(6, 9, 17, .72); backdrop-filter: blur(3px);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .perf-modal-box {
+            background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: var(--shadow); width: 100%; max-width: 880px; max-height: 84vh;
+            overflow: auto; padding: 18px 20px 20px;
+        }
+        .perf-modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+        .perf-modal-head h3 { font-size: 15px; font-weight: 700; }
+        .perf-kv { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12px; color: var(--text-dim); margin-bottom: 12px; }
+        .perf-kv b { color: var(--text); font-weight: 600; }
+        .perf-pre {
+            background: #0d121d; border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+            font-family: "SF Mono", Consolas, monospace; font-size: 11.5px; line-height: 1.6;
+            color: var(--text-dim); white-space: pre-wrap; word-break: break-word;
+            max-height: 170px; overflow: auto; margin-bottom: 12px;
+        }
+        .perf-pre-label { font-size: 11.5px; color: var(--text-faint); margin-bottom: 5px; }
     </style>
 </head>
 <body>
@@ -712,6 +882,9 @@
             <button class="tab-btn" onclick="switchTab('ccusage', this)">CC 用量</button>
             <button class="tab-btn" onclick="switchTab('flow', this)">模型流向图</button>
             <button class="tab-btn" onclick="switchTab('endpoints', this)">端点模型</button>
+            <button class="tab-btn" onclick="switchTab('perf', this)">性能测试</button>
+            <button class="tab-btn" onclick="switchTab('ray', this)">服务器状态</button>
+            <button class="tab-btn" onclick="switchTab('errors', this)">错误日志 <span id="err-badge" class="err-badge" style="display:none">0</span></button>
             <button class="tab-btn" onclick="switchTab('config', this)">配置文件</button>
         </div>
 
@@ -767,6 +940,15 @@
                     <div id="stream-data" class="stream-data">等待流数据…</div>
                 </div>
             </div>
+            <div class="panel" style="margin-top:16px;">
+                <div class="panel-header">
+                    <span>实时数据流</span>
+                    <span class="hint">→ 客户端请求 · ← 服务端响应</span>
+                </div>
+                <div class="flow-anim-wrap">
+                    <canvas id="flow-anim"></canvas>
+                </div>
+            </div>
         </div>
 
         <!-- Statistics -->
@@ -790,8 +972,9 @@
                             数据来源：<code style="color:var(--blue);" id="ccusage-src">ccusage</code>
                         </span>
                         <div class="spacer"></div>
+                        <span class="hint ccu-refresh-progress" id="ccu-refresh-progress"></span>
                         <button class="btn" onclick="toggleAllCcusage(this)">全部展开</button>
-                        <button class="btn" onclick="loadCcusage(true)">刷新</button>
+                        <button class="btn" id="ccu-refresh-btn" onclick="refreshCcusage()">刷新</button>
                     </div>
                     <div class="ccu-filters">
                         <span class="ccu-filter-label">筛选</span>
@@ -827,7 +1010,6 @@
                 <span class="lg"><span class="sw" style="background:var(--accent);"></span> 别名模型 (__proxy__)</span>
                 <span class="lg"><span class="sw" style="background:var(--accent-2);"></span> 目标/具体模型</span>
                 <span class="lg"><span class="sw" style="background:var(--blue);"></span> 端点 (proxy_path_prefix)</span>
-                <span class="lg"><span class="sw" style="background:var(--green);"></span> 后端服务 (target_base_url)</span>
                 <span class="lg" style="margin-left:auto;color:var(--text-faint);">点击模型/端点节点可调整流向</span>
             </div>
             <div class="flow-wrap" id="flow-chart"></div>
@@ -839,6 +1021,7 @@
                 <input class="flow-search" id="ep-search" placeholder="搜索端点 / 模型…" oninput="renderEndpoints()">
                 <label class="switch"><input type="checkbox" id="ep-hide-empty" onchange="renderEndpoints()"> 隐藏无模型端点</label>
                 <div class="spacer"></div>
+                <button class="btn danger" id="ep-batch-block" onclick="batchBlockFiltered()" disabled title="将当前筛选出的所有模型持久化屏蔽（写入配置，/v1/models 不再返回）">批量屏蔽筛选模型</button>
                 <button class="btn primary" onclick="requestEndpointHealth()">重新检测</button>
             </div>
             <div class="flow-legend">
@@ -848,6 +1031,136 @@
                 <span class="lg" style="margin-left:auto;color:var(--text-faint);">探测每个端点 /v1/models 的可达性</span>
             </div>
             <div class="flow-wrap" id="endpoints-list"></div>
+        </div>
+
+
+        <!-- Perf test -->
+        <div id="perf-tab" class="tab-content">
+            <div class="perf-wrap">
+                <div class="panel">
+                    <div class="panel-header"><span>测试配置</span><span class="hint">接口信息自动取自代理</span></div>
+                    <div class="panel-body perf-form" style="max-height:none;">
+                        <div class="perf-group">
+                            <div class="perf-group-title">接口（自动）</div>
+                            <div class="perf-field">
+                                <label for="perf-target">测试入口</label>
+                                <select id="perf-target" class="perf-select"></select>
+                            </div>
+                            <div class="perf-field">
+                                <label for="perf-model">模型</label>
+                                <select id="perf-model" class="perf-select"></select>
+                            </div>
+                            <div class="perf-field">
+                                <label for="perf-apikey">请求密钥</label>
+                                <input type="password" id="perf-apikey" class="perf-input" placeholder="留空即可（同源请求本代理）">
+                            </div>
+                            <div class="perf-hint">请求地址：<span class="perf-url" id="perf-url">/v1/chat/completions</span></div>
+                            <div class="perf-hint" id="perf-route"></div>
+                        </div>
+
+                        <div class="perf-group">
+                            <div class="perf-group-title">测试参数</div>
+                            <div class="perf-field">
+                                <label for="perf-min">输入长度最小</label>
+                                <input type="number" id="perf-min" class="perf-input" value="128">
+                            </div>
+                            <div class="perf-field">
+                                <label for="perf-max">输入长度最大</label>
+                                <input type="number" id="perf-max" class="perf-input" value="4096">
+                            </div>
+                            <div class="perf-field">
+                                <label for="perf-step">步长</label>
+                                <input type="number" id="perf-step" class="perf-input" value="2" step="any" style="flex:0 0 90px;">
+                                <select id="perf-stepmode" class="perf-select">
+                                    <option value="mul">倍增（×）</option>
+                                    <option value="add">递增（＋）</option>
+                                </select>
+                            </div>
+                            <div class="perf-field">
+                                <label for="perf-out">输出长度</label>
+                                <input type="number" id="perf-out" class="perf-input" value="128">
+                            </div>
+                            <div class="perf-field">
+                                <label for="perf-conc">并发数</label>
+                                <input type="number" id="perf-conc" class="perf-input" value="1" min="1" max="100">
+                            </div>
+                            <div class="perf-field">
+                                <label for="perf-struct">模型结构长度</label>
+                                <input type="number" id="perf-struct" class="perf-input" value="16">
+                            </div>
+                            <div class="perf-hint">输入长度 = 系统提示词长度 + 用户提示词长度 + 模型结构长度</div>
+                        </div>
+
+                        <div class="perf-group">
+                            <div class="perf-group-title">高级</div>
+                            <label class="switch"><input type="checkbox" id="perf-usage" checked> 索取服务端 usage（stream_options.include_usage）</label>
+                            <div class="perf-hint" style="margin-bottom:8px;">开启后用上游返回的 prompt_tokens / completion_tokens 计算速度，比本地分词估算更准确。</div>
+                            <textarea id="perf-extra" class="perf-area" rows="4" placeholder='额外请求参数（JSON），例如关闭思考模式：
+{"chat_template_kwargs": {"enable_thinking": false}}'></textarea>
+                        </div>
+
+                        <div class="perf-group">
+                            <div class="perf-group-title">报告信息（导出用）</div>
+                            <div class="perf-field"><label for="perf-processor">处理器</label><input type="text" id="perf-processor" class="perf-input"></div>
+                            <div class="perf-field"><label for="perf-mainboard">主板</label><input type="text" id="perf-mainboard" class="perf-input"></div>
+                            <div class="perf-field"><label for="perf-memory">内存</label><input type="text" id="perf-memory" class="perf-input"></div>
+                            <div class="perf-field"><label for="perf-gpu">显卡</label><input type="text" id="perf-gpu" class="perf-input"></div>
+                            <div class="perf-field"><label for="perf-system">系统</label><input type="text" id="perf-system" class="perf-input"></div>
+                            <div class="perf-field"><label for="perf-engine">推理引擎</label><input type="text" id="perf-engine" class="perf-input"></div>
+                            <div class="perf-field"><label for="perf-enginemodel">引擎模型</label><input type="text" id="perf-enginemodel" class="perf-input"></div>
+                            <div class="toolbar" style="margin-top:8px;">
+                                <button class="btn" onclick="perfFillFromRay()">从 Ray 集群自动填充</button>
+                                <button class="btn" onclick="perfSyncMeta(true)">重新推导引擎信息</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="perf-col">
+                    <div class="panel">
+                        <div class="panel-header"><span>测试结果</span><span class="hint" id="perf-progress"></span></div>
+                        <div class="panel-body" style="max-height:none;">
+                            <div class="toolbar">
+                                <button class="btn primary" id="perf-start" onclick="perfToggle()">开始测试</button>
+                                <button class="btn" onclick="perfClear()">清空结果</button>
+                                <div class="spacer"></div>
+                                <button class="btn" onclick="perfExportPng()">下载折线图</button>
+                                <button class="btn" onclick="perfExportCsv()">下载 CSV</button>
+                                <button class="btn" onclick="perfExportMd()">下载 Markdown</button>
+                            </div>
+                            <div class="perf-summary" id="perf-summary" style="margin-top:12px;"></div>
+                            <div class="perf-tbl-wrap">
+                                <table class="tbl" id="perf-table">
+                                    <thead>
+                                        <tr>
+                                            <th>输入长度</th>
+                                            <th>预填充耗时 (ms)</th>
+                                            <th>每请求预填充速度 (t/s)</th>
+                                            <th>预填充批次吞吐 (t/s)</th>
+                                            <th>输出长度</th>
+                                            <th>输出耗时 (ms)</th>
+                                            <th>每请求输出速度 (t/s)</th>
+                                            <th>整轮输出吞吐 (t/s)</th>
+                                            <th>并发</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="perf-tbody"></tbody>
+                                </table>
+                            </div>
+                            <div class="perf-hint">吞吐口径：预填充批次吞吐统计到全组最后一个首字；整轮输出吞吐按全组总输出 token ÷ 从同时发起到全部完成的墙钟时间计算，包含排队、预填充和解码。</div>
+                        </div>
+                    </div>
+
+                    <div class="panel">
+                        <div class="panel-header"><span>速度曲线</span><span class="hint">深色为页面显示，导出 PNG 使用浅色主题</span></div>
+                        <div class="panel-body perf-charts" style="max-height:none;">
+                            <canvas id="perf-chart-prefill" class="perf-chart"></canvas>
+                            <canvas id="perf-chart-output" class="perf-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Config -->
@@ -883,6 +1196,26 @@
                 </div>
             </div>
         </div>
+
+        <!-- Server Error Log -->
+        <div id="errors-tab" class="tab-content">
+            <div class="flow-tools">
+                <span style="font-size:12px;color:var(--text-dim);">服务端错误与上游异常实时展示（最多保留 200 条），点击条目展开详情</span>
+                <div class="spacer"></div>
+                <button class="btn" onclick="socket.emit('clear_server_errors')">清空</button>
+            </div>
+            <div id="errors-list"><p class="empty">暂无错误</p></div>
+        </div>
+
+        <!-- Ray Cluster Server Status -->
+        <div id="ray-tab" class="tab-content">
+            <div class="flow-tools">
+                <span style="font-size:12px;color:var(--text-dim);" id="ray-generated"></span>
+                <div class="spacer"></div>
+                <button class="btn" onclick="loadRayStatus()">刷新</button>
+            </div>
+            <div id="ray-status-content"><p class="empty">加载中…</p></div>
+        </div>
     </div>
 
     <div class="toast-wrap" id="toast-wrap"></div>
@@ -903,6 +1236,11 @@
         let ccusageData = null;
         let ccuAgentFilter = '';
         let ccuModelFilter = '';
+        let serverErrors = [];
+        let errSeenCount = 0;
+        let visionDisabled = [];  // 别名 Vision 重定向被关闭的列表（服务器可下发）
+        let ccuOpenMonths = null; // 已展开的 ccusage 月份（null = 未交互，默认首月展开）
+        let ccuPollTimer = null;  // 无 WS 连接时的刷新进度轮询
 
         // ============ Toasts ============
         function showToast(msg, type) {
@@ -938,6 +1276,21 @@
             updateInitialData(data);
             if (data.token_stats) updateTokenStats(data.token_stats);
             if (data.server_stats) updateServerStats(data.server_stats);
+            if (data.errors) { serverErrors = data.errors; renderErrors(); updateErrBadge(); }
+        });
+
+        socket.on('server_error', function (data) {
+            if (!data || !data.error) return;
+            serverErrors.unshift(data.error);
+            if (serverErrors.length > 200) serverErrors.length = 200;
+            renderErrors();
+            updateErrBadge();
+        });
+
+        socket.on('errors_cleared', function () {
+            serverErrors = [];
+            renderErrors();
+            updateErrBadge();
         });
 
         socket.on('token_stats_update', function (data) { updateTokenStats(data.stats); });
@@ -959,13 +1312,17 @@
                 });
             }
             if (data.vision_redirects) visionRedirects = data.vision_redirects;
+            if (data.vision_disabled) visionDisabled = data.vision_disabled;
             renderFlowChart();
             renderPureProxyEndpoints();
+            if (endpointHealth) renderEndpoints();
+            if (perfInited) { perfRebuildTargets(); perfRebuildModels(); perfSyncMeta(); }
             if (data.message) showToast(data.message, 'success');
         });
 
         socket.on('vision_redirects_update', function (data) {
             if (data && data.vision_redirects) visionRedirects = data.vision_redirects;
+            if (data && data.vision_disabled) visionDisabled = data.vision_disabled;
             renderFlowChart();
         });
 
@@ -987,6 +1344,25 @@
 
         socket.on('config_update_error', function (data) {
             showToast(data.message || '配置操作失败', 'error');
+        });
+
+        // ccusage refresh: progress + result are broadcast to ALL connected
+        // clients, so every open monitor tab stays in sync.
+        socket.on('ccusage_progress', function (p) {
+            if (!ccuRefreshActive()) return;
+            setCcuRefreshUI(true, ccuProgressText(p));
+        });
+
+        socket.on('ccusage_updated', function (data) {
+            setCcuRefreshUI(false, '');
+            ccusageData = data;
+            if (document.getElementById('ccusage-content')) renderCcusage(data);
+            showToast('ccusage 用量已更新', 'success');
+        });
+
+        socket.on('ccusage_error', function (data) {
+            setCcuRefreshUI(false, '');
+            showToast((data && data.message) || 'ccusage 刷新失败', 'error');
         });
 
         socket.on('connect_error', function () {
@@ -1045,11 +1421,13 @@
             }
             list.prepend(item);
             trimList(list, 50);
+            flowOnRequest(connection);
         }
 
         function updateConnection(updateData) {
             const item = document.getElementById('conn-' + updateData.id);
             if (item && updateData.response_size !== undefined) {
+                flowOnResponse();
                 let el = item.querySelector('.resp');
                 if (!el) {
                     const meta = item.querySelector('.meta');
@@ -1095,6 +1473,7 @@
             }
             list.prepend(item);
             trimList(list, 8);
+            flowOnStreamStart(stream);
         }
 
         function updateStreamStatus(id, status) {
@@ -1113,6 +1492,7 @@
         }
 
         function updateStreamData(data) {
+            flowOnChunk();
             const el = document.getElementById('stream-data');
             let content = '';
 
@@ -1143,8 +1523,221 @@
                 let current = el.textContent;
                 current = current === '等待流数据…' ? '' : current;
                 el.textContent = (current + content).slice(-8000);
+                if (!content.startsWith('[usage]')) flowTrackTokens(content);
             }
             el.scrollTop = el.scrollHeight;
+        }
+
+        // ============ Live flow animation ============
+        const flowAnim = {
+            packets: [], reqTs: [], respTs: [], last: '', tokBuf: [],
+            glow: { c: 0, p: 0, b: 0 }, dash: 0,
+            raf: null, lastTs: 0, lastChunk: 0
+        };
+        const FLOW_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif';
+
+        function flowSpawn(dir, n, label) {
+            for (let i = 0; i < n; i++) {
+                flowAnim.packets.push({ dir: dir, t: -i * 0.14, sp: 0.5 + Math.random() * 0.3 });
+            }
+            if (flowAnim.packets.length > 160) flowAnim.packets.splice(0, flowAnim.packets.length - 160);
+            const now = Date.now();
+            if (dir === 'req') {
+                flowAnim.reqTs.push(now);
+                if (label) flowAnim.last = label;
+            } else {
+                flowAnim.respTs.push(now);
+            }
+        }
+
+        function flowOnRequest(c) {
+            let label = (c.method || '') + ' ' + (c.url || '');
+            if (c.model) label += ' · ' + c.model;
+            if (c.endpoint) label += ' → ' + c.endpoint;
+            flowSpawn('req', 3, label);
+            flowAnim.glow.c = 1;
+        }
+
+        function flowOnResponse() { flowSpawn('resp', 2, null); }
+
+        function flowOnStreamStart(s) {
+            let label = '流式 ' + (s.url || '');
+            if (s.model) label += ' · ' + s.model;
+            flowSpawn('resp', 3, label);
+            flowAnim.glow.b = 1;
+        }
+
+        function flowOnChunk() {
+            const now = Date.now();
+            if (now - flowAnim.lastChunk < 180) return;
+            flowAnim.lastChunk = now;
+            flowSpawn('resp', 1, null);
+        }
+
+        // Rough token estimate for the live tok/s meter: CJK chars count as
+        // ~1 token each, non-CJK text as ~1 token per word. It is a heuristic,
+        // not an exact tokenizer count.
+        function estimateTokens(text) {
+            const cjk = (text.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g) || []).length;
+            const rest = text.replace(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g, ' ');
+            return cjk + (rest.match(/\S+/g) || []).length;
+        }
+
+        function flowTrackTokens(text) {
+            flowAnim.tokBuf.push({ t: Date.now(), n: estimateTokens(text) });
+            if (flowAnim.tokBuf.length > 4000) flowAnim.tokBuf.splice(0, flowAnim.tokBuf.length - 4000);
+        }
+
+        function flowAnimDraw(cv, dt) {
+            const dpr = window.devicePixelRatio || 1;
+            const w = cv.clientWidth, h = cv.clientHeight;
+            if (!w || !h) return;
+            if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+                cv.width = Math.round(w * dpr);
+                cv.height = Math.round(h * dpr);
+            }
+            const ctx = cv.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, w, h);
+
+            const cy = h / 2 - 20;
+            const reqY = cy - 14, respY = cy + 14;
+            const xC = 42, xP = w / 2, xB = w - 42;
+
+            // Lanes: dashes drift in the direction of the traffic they carry.
+            flowAnim.dash = (flowAnim.dash + dt * 24) % 16;
+            function lane(y, offset) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(139,150,173,.35)';
+                ctx.lineWidth = 1.2;
+                ctx.setLineDash([6, 8]);
+                ctx.lineDashOffset = -offset;
+                ctx.beginPath();
+                ctx.moveTo(xC, y);
+                ctx.lineTo(xB, y);
+                ctx.stroke();
+                ctx.restore();
+            }
+            lane(reqY, flowAnim.dash);
+            lane(respY, -flowAnim.dash);
+
+            // Particles: req left→right on the upper lane, resp right→left below.
+            const keep = [];
+            for (const p of flowAnim.packets) {
+                const pt = p.t;
+                p.t += p.sp * dt;
+                if (p.t <= 1.12) keep.push(p);
+                if (pt < 0.5 && p.t >= 0.5) flowAnim.glow.p = 1;
+                if (pt < 1 && p.t >= 1) {
+                    if (p.dir === 'req') flowAnim.glow.b = 1; else flowAnim.glow.c = 1;
+                }
+                const y = p.dir === 'req' ? reqY : respY;
+                const x = p.dir === 'req' ? xC + (xB - xC) * p.t : xB - (xB - xC) * p.t;
+                const col = p.dir === 'req' ? '#818cf8' : '#34d399';
+                ctx.save();
+                ctx.globalAlpha = p.t < 0 ? Math.max(0, 1 + p.t * 4) : (p.t > 0.95 ? Math.max(0, (1.12 - p.t) / 0.17) : 1);
+                ctx.shadowColor = col;
+                ctx.shadowBlur = 9;
+                ctx.fillStyle = col;
+                ctx.beginPath();
+                ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            flowAnim.packets = keep;
+
+            for (const k of ['c', 'p', 'b']) flowAnim.glow[k] = Math.max(0, flowAnim.glow[k] - dt * 1.6);
+
+            // Icon nodes (drawn above particles so packets slip underneath).
+            const now = Date.now();
+            while (flowAnim.reqTs.length && now - flowAnim.reqTs[0] > 60000) flowAnim.reqTs.shift();
+            while (flowAnim.respTs.length && now - flowAnim.respTs[0] > 60000) flowAnim.respTs.shift();
+            const streams = (document.getElementById('streams-count') || {}).textContent || '0';
+
+            function node(x, icon, label, sub, glow, color) {
+                const r = 23;
+                ctx.save();
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 18 * glow;
+                ctx.fillStyle = '#1b2338';
+                ctx.beginPath();
+                ctx.arc(x, cy, r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.strokeStyle = glow > 0.06 ? color : '#2a3550';
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                ctx.arc(x, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = '19px "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif';
+                ctx.fillText(icon, x, cy + 1);
+                ctx.textBaseline = 'alphabetic';
+                ctx.fillStyle = '#e6ebf5';
+                ctx.font = '600 12px ' + FLOW_FONT;
+                ctx.fillText(label, x, cy + 42);
+                ctx.fillStyle = '#8b96ad';
+                ctx.font = '10.5px ' + FLOW_FONT;
+                ctx.fillText(sub, x, cy + 58);
+                ctx.restore();
+            }
+
+            // Tiny direction labels on the lanes
+            ctx.fillStyle = '#5d6880';
+            ctx.font = '10.5px ' + FLOW_FONT;
+            ctx.textAlign = 'center';
+            ctx.fillText('请求 →', (xC + xP) / 2, reqY - 8);
+            ctx.fillText('← 响应', (xP + xB) / 2, respY + 16);
+
+            node(xC, '🤖', '客户端', '↑ ' + flowAnim.reqTs.length + ' 请求/分', flowAnim.glow.c, '#818cf8');
+            node(xP, '🔀', 'API Proxy', '活跃流 ' + streams, flowAnim.glow.p, '#8b5cf6');
+            node(xB, '🖥️', '上游后端', '↓ ' + flowAnim.respTs.length + ' 响应/分', flowAnim.glow.b, '#34d399');
+
+            // Live tok/s meter (1s window: output the per-second result directly)
+            while (flowAnim.tokBuf.length && now - flowAnim.tokBuf[0].t > 1000) flowAnim.tokBuf.shift();
+            let tokSum = 0;
+            for (const e of flowAnim.tokBuf) tokSum += e.n;
+            const tps = tokSum;
+            const tokActive = flowAnim.tokBuf.length && (now - flowAnim.tokBuf[flowAnim.tokBuf.length - 1].t < 1500);
+
+            // Latest event ticker (truncated to leave room for the tok/s badge)
+            if (flowAnim.last) {
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#5d6880';
+                ctx.font = '11px ' + FLOW_FONT;
+                const maxW = w - 150;
+                let txt = flowAnim.last;
+                if (ctx.measureText(txt).width > maxW) {
+                    while (txt.length > 4 && ctx.measureText(txt + '…').width > maxW) txt = txt.slice(0, -1);
+                    txt += '…';
+                }
+                ctx.fillText(txt, 12, h - 10);
+            }
+
+            // tok/s badge (bottom-right)
+            ctx.textAlign = 'right';
+            ctx.font = '700 12px ' + FLOW_FONT;
+            ctx.fillStyle = tps > 0 ? '#fbbf24' : '#5d6880';
+            ctx.globalAlpha = tps > 0 && !tokActive ? 0.55 : 1;
+            ctx.fillText('⚡ ' + (tps >= 10 ? Math.round(tps) : tps.toFixed(1)) + ' tok/s', w - 12, h - 10);
+            ctx.globalAlpha = 1;
+        }
+
+        function flowAnimLoop(ts) {
+            flowAnim.raf = requestAnimationFrame(flowAnimLoop);
+            const cv = document.getElementById('flow-anim');
+            if (!cv) return;
+            const tab = document.getElementById('monitor-tab');
+            if (!tab || !tab.classList.contains('active')) { flowAnim.lastTs = ts; return; }
+            const dt = Math.min(0.05, flowAnim.lastTs ? (ts - flowAnim.lastTs) / 1000 : 0.016);
+            flowAnim.lastTs = ts;
+            flowAnimDraw(cv, dt);
+        }
+
+        function flowAnimStart() {
+            if (flowAnim.raf) cancelAnimationFrame(flowAnim.raf);
+            flowAnim.raf = requestAnimationFrame(flowAnimLoop);
         }
 
         // ============ Token stats ============
@@ -1192,17 +1785,57 @@
             return isNaN(d.getTime()) ? '' : CCU_WEEKDAYS[d.getDay()];
         }
 
+        function ccuRefreshActive() {
+            const btn = document.getElementById('ccu-refresh-btn');
+            return !!(btn && btn.disabled);
+        }
+
+        function setCcuRefreshUI(active, text) {
+            const btn = document.getElementById('ccu-refresh-btn');
+            const prog = document.getElementById('ccu-refresh-progress');
+            if (btn) { btn.disabled = !!active; btn.textContent = active ? '刷新中…' : '刷新'; }
+            if (prog) prog.textContent = text || '';
+            if (!active && ccuPollTimer) { clearTimeout(ccuPollTimer); ccuPollTimer = null; }
+        }
+
+        function ccuProgressText(p) {
+            if (!p) return '刷新 ccusage…';
+            if (p.total > 0) return '刷新 ccusage ' + (p.done || 0) + '/' + p.total + '：' + (p.step || '');
+            return '刷新 ccusage：' + (p.step || '准备中…');
+        }
+
+        function refreshCcusage() {
+            if (ccuRefreshActive()) return;
+            if (socket.connected) {
+                setCcuRefreshUI(true, '排队刷新 ccusage…');
+                socket.emit('ccusage_refresh');
+            } else {
+                loadCcusage(true);
+            }
+        }
+
         function loadCcusage(forceRefresh) {
             const box = document.getElementById('ccusage-content');
             if (!box) return;
             const url = forceRefresh ? '/ccusage?refresh=1' : '/ccusage';
+            if (forceRefresh && !socket.connected) setCcuRefreshUI(true, '刷新 ccusage…');
             fetch(url)
                 .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                 .then(function (data) {
                     ccusageData = data;
                     renderCcusage(data);
+                    if (data.refreshing) {
+                        setCcuRefreshUI(true, ccuProgressText(data.progress));
+                        if (!socket.connected) {
+                            clearTimeout(ccuPollTimer);
+                            ccuPollTimer = setTimeout(function () { loadCcusage(false); }, 2000);
+                        }
+                    } else if (!socket.connected || ccuRefreshActive()) {
+                        setCcuRefreshUI(false, '');
+                    }
                 })
                 .catch(function (err) {
+                    setCcuRefreshUI(false, '');
                     box.innerHTML = '<p class="empty">ccusage 数据加载失败：' + escText(err.message) + '</p>';
                 });
         }
@@ -1415,7 +2048,7 @@
             let html = '';
             const filtering = !!(ccuAgentFilter || ccuModelFilter);
             months.forEach(function (m, i) {
-                const openCls = i === 0 ? ' open' : '';
+                const openCls = (ccuOpenMonths === null ? i === 0 : ccuOpenMonths.has(m.month)) ? ' open' : '';
                 let monthT = null;
                 if (filtering) {
                     monthT = ccuEmptyTotals();
@@ -1497,6 +2130,16 @@
             const root = head.parentElement;
             const wasOpen = root.classList.contains('open');
             root.classList.toggle('open');
+            // 记录月份展开状态，重渲染后保持
+            if (root.id && root.id.indexOf('ccu-month-') === 0) {
+                const month = root.id.slice('ccu-month-'.length);
+                if (ccuOpenMonths === null) {
+                    ccuOpenMonths = new Set();
+                    document.querySelectorAll('#ccusage-content .ccu-month.open').forEach(m => ccuOpenMonths.add(m.id.slice('ccu-month-'.length)));
+                }
+                if (root.classList.contains('open')) ccuOpenMonths.add(month);
+                else ccuOpenMonths.delete(month);
+            }
             // Nested groups default closed; expanding a parent leaves children collapsed.
             if (!wasOpen && root.querySelector('.ccu-month-body')) {
                 root.querySelectorAll('.ccu-month-body > .ccu-day > .ccu-day-body').forEach(function (b) { b.parentElement.classList.remove('open'); });
@@ -1508,7 +2151,15 @@
             const content = document.getElementById('ccusage-content');
             const anyOpen = content.querySelector('.ccu-month.open');
             const openAll = !anyOpen;
-            content.querySelectorAll('.ccu-month').forEach(function (m) { m.classList.toggle('open', openAll); });
+            content.querySelectorAll('.ccu-month').forEach(function (m) {
+                m.classList.toggle('open', openAll);
+                if (m.id && m.id.indexOf('ccu-month-') === 0) {
+                    const month = m.id.slice('ccu-month-'.length);
+                    if (ccuOpenMonths === null) ccuOpenMonths = new Set();
+                    if (openAll) ccuOpenMonths.add(month);
+                    else ccuOpenMonths.delete(month);
+                }
+            });
             btn.textContent = openAll ? '全部收起' : '全部展开';
         }
 
@@ -1631,6 +2282,8 @@
 
             const aliasLanes = [];
             (aliasNames || []).forEach(function (alias) {
+                const aliasModel = findModel(alias);
+                if (aliasModel && aliasModel.is_displayed === false) return; // 屏蔽的模型不显示
                 const target = ciGet(redirects, alias) || alias;
                 const lane = buildLane(alias, target, { kind: 'alias' });
                 lane.isAlias = true;
@@ -1649,6 +2302,7 @@
             const byPrefix = {};
             (models || []).forEach(function (m) {
                 if (!showStatic && m.is_static) return;
+                if (m.is_displayed === false) return; // 屏蔽的模型不显示
                 if (onlyAliased && !m.redirect_to) return;
                 const p = groupPrefix(m.id);
                 if (!byPrefix[p]) byPrefix[p] = [];
@@ -1710,8 +2364,6 @@
             }
             // Endpoint node (interactive route)
             const endpointNode = routeSelectNode(lane.target, lane.route, lane.avail);
-            // Backend node
-            const backendNode = boxNode('backend', lane.backend || '（无后端）', '后端');
 
             let out = '<div class="lane">' +
                 sourceNode +
@@ -1719,8 +2371,6 @@
                 modelNode +
                 '<div class="lane-arrow">→</div>' +
                 endpointNode +
-                '<div class="lane-arrow">→</div>' +
-                backendNode +
                 '</div>';
 
             // Vision group: for alias lanes, enclose the whole flow (main
@@ -1729,8 +2379,9 @@
             if (lane.isAlias && cfg && cfg.allowRedirect !== false) {
                 const vr = visionRedirects || {};
                 const aliasKey = Object.keys(vr).find(function (k) { return String(k).toLowerCase() === String(lane.alias).toLowerCase(); });
-                const visionTarget = aliasKey ? vr[aliasKey] : '';
-                const on = !!visionTarget;
+                const visionTarget = aliasKey ? (vr[aliasKey] || '') : '';
+                const disabled = visionDisabled.map(function (s) { return String(s).toLowerCase(); }).indexOf(String(lane.alias).toLowerCase()) !== -1;
+                const on = !!visionTarget && !disabled;
                 out =
                     '<div class="lane-block">' +
                         out +
@@ -1740,39 +2391,150 @@
                                 '<span class="vr-ic">🖼</span>' +
                                 '<span class="vr-lbl">Vision</span>' +
                             '</label>' +
-                            (on ? visionSelectNode(lane.source, visionTarget) : '<span class="vr-empty">未启用</span>') +
+                            (on ? visionSelectNode(lane.source, visionTarget) : '<span class="vr-empty">' + (visionTarget ? '已关闭（目标：' + escAttr(visionTarget) + '）' : '未启用') + '</span>') +
                         '</div>' +
                     '</div>';
             }
             return out;
         }
 
+        // Searchable dropdown (combobox). Replaces plain <select> nodes in the
+        // flow chart so long model/endpoint lists can be filtered by typing.
+        // options: [{v: value, l: label, g: group|null}] — a null group renders
+        // before all group headers. The handler is invoked as handler(arg, value)
+        // via event delegation; the menu uses position:fixed so it escapes the
+        // overflow:hidden lane containers.
+        function searchSelectNode(nodeClass, title, handler, arg, options, selectedValue) {
+            const selOpt = options.find(function (o) { return o.v === selectedValue; });
+            const selLabel = selOpt ? selOpt.l : (options[0] ? options[0].l : '');
+            let opts = '';
+            let lastGroup = null;
+            for (const o of options) {
+                if (o.g) {
+                    if (o.g !== lastGroup) {
+                        opts += '<div class="sselect-group">' + escText(o.g) + '</div>';
+                        lastGroup = o.g;
+                    }
+                } else {
+                    lastGroup = null;
+                }
+                opts += '<div class="sselect-opt' + (o.v === selectedValue ? ' sel' : '') + '" data-value="' + escAttr(o.v) + '">' + escText(o.l) + '</div>';
+            }
+            return '<div class="lane-node sselect ' + nodeClass + '" data-handler="' + escAttr(handler) + '" data-arg="' + escAttr(arg) + '" data-sel-label="' + escAttr(selLabel) + '" title="' + escAttr(title) + '">' +
+                '<input class="sselect-toggle" value="' + escAttr(selLabel) + '" placeholder="输入筛选…">' +
+                '<div class="sselect-menu">' + (opts || '<div class="sselect-empty">（无选项）</div>') + '</div>' +
+                '</div>';
+        }
+
+        function closeAllSearchSelects() {
+            document.querySelectorAll('.sselect.open').forEach(function (root) {
+                root.classList.remove('open');
+                const toggle = root.querySelector('.sselect-toggle');
+                if (toggle) toggle.value = root.getAttribute('data-sel-label') || '';
+                const menu = root.querySelector('.sselect-menu');
+                if (menu) menu.querySelectorAll('.sselect-opt').forEach(function (o) { o.style.display = ''; });
+                if (menu) menu.querySelectorAll('.sselect-group').forEach(function (g) { g.style.display = ''; });
+            });
+        }
+
+        (function () {
+            function positionMenu(root) {
+                const toggle = root.querySelector('.sselect-toggle');
+                const menu = root.querySelector('.sselect-menu');
+                const r = toggle.getBoundingClientRect();
+                menu.style.left = r.left + 'px';
+                menu.style.width = Math.max(r.width, 220) + 'px';
+                menu.style.top = '';
+                menu.style.bottom = '';
+                if (window.innerHeight - r.bottom < 270 && r.top > 270) {
+                    menu.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+                } else {
+                    menu.style.top = (r.bottom + 4) + 'px';
+                }
+            }
+            const fc = document.getElementById('flow-chart');
+            if (!fc) return;
+            fc.addEventListener('click', function (e) {
+                const opt = e.target.closest('.sselect-opt');
+                if (opt) {
+                    const root = opt.closest('.sselect');
+                    const handler = root.getAttribute('data-handler');
+                    const arg = root.getAttribute('data-arg');
+                    root.setAttribute('data-sel-label', opt.textContent);
+                    root.querySelector('.sselect-toggle').value = opt.textContent;
+                    root.classList.remove('open');
+                    if (handler && typeof window[handler] === 'function') window[handler](arg, opt.getAttribute('data-value'));
+                    return;
+                }
+                const toggle = e.target.closest('.sselect-toggle');
+                if (toggle) {
+                    const root = toggle.closest('.sselect');
+                    const wasOpen = root.classList.contains('open');
+                    closeAllSearchSelects();
+                    if (!wasOpen) {
+                        root.classList.add('open');
+                        positionMenu(root);
+                        const menu = root.querySelector('.sselect-menu');
+                        const sel = menu.querySelector('.sselect-opt.sel');
+                        if (sel) sel.scrollIntoView({ block: 'center' });
+                        toggle.value = '';
+                        toggle.placeholder = '输入筛选…';
+                        toggle.focus();
+                    }
+                    return;
+                }
+                if (!e.target.closest('.sselect-menu')) closeAllSearchSelects();
+            });
+            fc.addEventListener('input', function (e) {
+                if (!e.target.classList.contains('sselect-toggle')) return;
+                const menu = e.target.closest('.sselect').querySelector('.sselect-menu');
+                const q = e.target.value.trim().toLowerCase();
+                let currentGroup = null, groupHasVisible = false;
+                Array.from(menu.children).forEach(function (el) {
+                    if (el.classList.contains('sselect-group')) {
+                        if (currentGroup) currentGroup.style.display = groupHasVisible ? '' : 'none';
+                        currentGroup = el;
+                        groupHasVisible = false;
+                    } else if (el.classList.contains('sselect-opt')) {
+                        const hit = !q || el.textContent.toLowerCase().indexOf(q) !== -1;
+                        el.style.display = hit ? '' : 'none';
+                        if (hit) groupHasVisible = true;
+                    }
+                });
+                if (currentGroup) currentGroup.style.display = groupHasVisible ? '' : 'none';
+            });
+            // 点击组件外关闭
+            document.addEventListener('click', function (e) {
+                if (!e.target.closest('.sselect')) closeAllSearchSelects();
+            });
+            // 滚动时重新定位（fixed 菜单跟随触发按钮）
+            document.addEventListener('scroll', function () {
+                document.querySelectorAll('.sselect.open').forEach(positionMenu);
+            }, true);
+        })();
+
         // Interactive select for the vision redirect target of an alias model
         function visionSelectNode(alias, currentTarget) {
             const models = allModelsData.models || [];
             const aliasSet = getProxyAliasSet();
-            let opts = '<option value=""' + (currentTarget ? '' : ' selected') + '>（无）</option>';
-            if (currentTarget) {
-                opts += '<option value="' + escAttr(currentTarget) + '" selected>' + escText(currentTarget) + '</option>';
-            }
+            const options = [{ v: '', l: '（无）' }];
+            if (currentTarget) options.push({ v: currentTarget, l: currentTarget });
             const groups = {};
             (models || []).forEach(function (m) {
                 if (String(m.id).toLowerCase() === String(alias).toLowerCase()) return;
                 if (aliasSet[String(m.id).toLowerCase()]) return;  // skip __proxy__ aliases
+                if (m.is_displayed === false && String(m.id).toLowerCase() !== String(currentTarget).toLowerCase()) return; // 屏蔽的模型不出现在下拉中
                 const g = groupPrefix(m.id);
                 if (!groups[g]) groups[g] = [];
                 groups[g].push(m.id);
             });
             Object.keys(groups).sort().forEach(function (g) {
                 groups[g].sort();
-                opts += '<optgroup label="' + escText(g) + '">';
                 groups[g].forEach(function (id) {
-                    const sel = currentTarget && String(id).toLowerCase() === String(currentTarget).toLowerCase() ? 'selected' : '';
-                    opts += '<option value="' + escAttr(id) + '"' + sel + '>' + escText(id) + '</option>';
+                    options.push({ v: id, l: id, g: g });
                 });
-                opts += '</optgroup>';
             });
-            return '<div class="lane-node model"><select title="Vision 重定向到视觉模型" onchange="setVisionRedirect(&quot;' + escAttr(alias) + '&quot;,this.value)">' + opts + '</select></div>';
+            return searchSelectNode('model', 'Vision 重定向到视觉模型', 'setVisionRedirect', alias, options, currentTarget || '');
         }
 
         function boxNode(kind, text, label) {
@@ -1785,48 +2547,39 @@
             const redirects = allModelsData.redirects || {};
             const isRedirected = !!ciGet(redirects, alias);
             const aliasSet = getProxyAliasSet();
-            let opts = '<option value=""' + (!isRedirected || !currentTarget || String(currentTarget).toLowerCase() === String(alias).toLowerCase() ? ' selected' : '') + '>（使用原名）</option>';
-            if (currentTarget && isRedirected) {
-                opts += '<option value="' + escAttr(currentTarget) + '" selected>' + escText(currentTarget) + '</option>';
-            }
+            const options = [{ v: '', l: '（使用原名）' }];
+            if (currentTarget && isRedirected) options.push({ v: currentTarget, l: currentTarget });
             // Group other models by prefix, excluding __proxy__ aliases so we
             // never offer a second-level alias redirect (which would lose routing).
             const groups = {};
             (models || []).forEach(function (m) {
                 if (String(m.id).toLowerCase() === String(alias).toLowerCase()) return;
                 if (aliasSet[String(m.id).toLowerCase()]) return;  // skip __proxy__ aliases
+                if (m.is_displayed === false && !(isRedirected && currentTarget && String(m.id).toLowerCase() === String(currentTarget).toLowerCase())) return; // 屏蔽的模型不出现在下拉中
                 const g = groupPrefix(m.id);
                 if (!groups[g]) groups[g] = [];
                 groups[g].push(m.id);
             });
             Object.keys(groups).sort().forEach(function (g) {
                 groups[g].sort();
-                opts += '<optgroup label="' + escText(g) + '">';
                 groups[g].forEach(function (id) {
-                    const sel = isRedirected && currentTarget && String(id).toLowerCase() === String(currentTarget).toLowerCase() ? 'selected' : '';
-                    opts += '<option value="' + escAttr(id) + '"' + sel + '>' + escText(id) + '</option>';
+                    options.push({ v: id, l: id, g: g });
                 });
-                opts += '</optgroup>';
             });
-            const kclass = found ? 'model' : 'missing';
-            return '<div class="lane-node ' + kclass + '"><select title="重定向到目标模型" onchange="setModelRedirect(&quot;' + escAttr(alias) + '&quot;,this.value)">' + opts + '</select></div>';
+            return searchSelectNode(found ? 'model' : 'missing', '重定向到目标模型', 'setModelRedirect', alias, options, (isRedirected && currentTarget) ? currentTarget : '');
         }
 
         // Interactive select for choosing the routing endpoint of a concrete model
         // Always offers every real endpoint (has target_base_url) so the flow is
         // complete even if the target model isn't resolvable in the cache.
         function routeSelectNode(modelId, route, avail) {
+            void avail;
             const endpoints = (allModelsData.endpoints || []).filter(function (ep) { return ep.target_base_url && ep.target_base_url.trim() !== ''; });
-            const epMap = flowEndpointMap();
-
-            let html = '<option value="">（默认路由）</option>';
+            const options = [{ v: '', l: '（默认路由）' }];
             endpoints.forEach(function (ep) {
-                const label = ep.proxy_path_prefix + ' · ' + ep.target_base_url;
-                const sel = route && String(ep.proxy_path_prefix) === String(route) ? 'selected' : '';
-                html += '<option value="' + escAttr(ep.proxy_path_prefix) + '"' + sel + '>' + escText(label) + '</option>';
+                options.push({ v: ep.proxy_path_prefix, l: ep.proxy_path_prefix });
             });
-            const kclass = (route && epMap[route]) ? 'endpoint' : (route ? 'endpoint' : 'missing');
-            return '<div class="lane-node ' + kclass + '"><select title="路由到端点" onchange="changeModelRoute(&quot;' + escAttr(modelId) + '&quot;,this.value)">' + html + '</select></div>';
+            return searchSelectNode(route ? 'endpoint' : 'missing', '路由到端点', 'changeModelRoute', modelId, options, route || '');
         }
 
         // Keep a stub for safety
@@ -1835,6 +2588,17 @@
         // ============ Endpoint health / models ============
         function requestEndpointHealth() { socket.emit('request_endpoint_health'); }
 
+        // Model ids matching the current endpoint-tab filter (deduped, in
+        // render order). Used by the batch-block button; empty when no filter.
+        let epFilteredModelIds = [];
+
+        // Current display state of an endpoint-health model entry, preferring
+        // the fresh cached_models copy (endpoint health snapshots lag behind).
+        function epModelDisplayed(m) {
+            const cm = (allModelsData.models || []).find(function (x) { return x.id === m.id; });
+            return (cm ? cm.is_displayed : m.is_displayed) !== false;
+        }
+
         function renderEndpoints() {
             const container = document.getElementById('endpoints-list');
             if (!container) return;
@@ -1842,10 +2606,19 @@
             const q = (document.getElementById('ep-search') ? document.getElementById('ep-search').value : '').trim().toLowerCase();
             const hideEmpty = document.getElementById('ep-hide-empty') ? document.getElementById('ep-hide-empty').checked : false;
             const health = endpointHealth || [];
-            const epMap = flowEndpointMap();
+
+            epFilteredModelIds = [];
+            const batchBtn = document.getElementById('ep-batch-block');
+            function syncBatchButton() {
+                if (!batchBtn) return;
+                const blockable = epFilteredModelIds.filter(function (id) { return epModelDisplayed({ id: id }); });
+                batchBtn.textContent = q ? '批量屏蔽筛选模型 (' + blockable.length + ')' : '批量屏蔽筛选模型';
+                batchBtn.disabled = !q || blockable.length === 0;
+            }
 
             if (!health.length) {
                 container.innerHTML = '<p class="empty">尚未检测端点，点击「重新检测」</p>';
+                syncBatchButton();
                 return;
             }
 
@@ -1862,6 +2635,7 @@
 
             if (!filteredEp.length) {
                 container.innerHTML = '<p class="empty">' + (q ? '无匹配端点' : '无端点') + '</p>';
+                syncBatchButton();
                 return;
             }
 
@@ -1877,16 +2651,34 @@
                 }
                 const lat = (typeof ep.latency_ms === 'number' && ep.latency_ms > 0) ? ' · ' + ep.latency_ms + 'ms' : '';
 
+                // With an active filter, only list the models that match it.
+                const allModels = ep.models || [];
+                const models = q ? allModels.filter(function (m) {
+                    return m.id.toLowerCase().indexOf(q) !== -1;
+                }) : allModels;
+                const endpointSelfMatch = q && (ep.proxy_path_prefix + ' ' + (ep.target_base_url || '')).toLowerCase().indexOf(q) !== -1;
+                if (q && !models.length && !endpointSelfMatch) return; // hide cards with no matching models
+
                 let modelsHtml = '';
-                const models = ep.models || [];
-                if (!models.length && kind !== 'virtual') {
+                if (!allModels.length && kind !== 'virtual') {
                     modelsHtml = '<div class="ep-empty">（未获取到模型列表）</div>';
                 }
                 if (kind === 'virtual') {
                     modelsHtml = '<div class="ep-empty">虚拟代理端点（模型经重定向路由，集中展示在「模型流向图」）</div>';
                 }
+                if (q && !models.length && allModels.length && !endpointSelfMatch) {
+                    modelsHtml = '<div class="ep-empty">（无匹配模型）</div>';
+                } else if (q && !models.length && endpointSelfMatch) {
+                    modelsHtml = '<div class="ep-empty">（端点匹配筛选，但无匹配模型）</div>';
+                }
                 models.forEach(function (m) {
-                    modelsHtml += '<span class="ep-model' + (m.is_displayed === false ? ' hidden' : '') + '" title="' + escAttr(m.id) + (m.is_static ? ' （静态）' : '') + '">' + escText(m.id) + '</span>';
+                    const displayed = epModelDisplayed(m);
+                    if (epFilteredModelIds.indexOf(m.id) === -1) epFilteredModelIds.push(m.id);
+                    const mml = m.max_model_len ? ' <span class="ep-mml">' + (m.max_model_len >= 1024 ? Math.round(m.max_model_len / 1024) + 'k' : m.max_model_len) + '</span>' : '';
+                    modelsHtml += '<span class="ep-model' + (displayed ? '' : ' blocked') + '" title="' + escAttr(m.id) + (m.is_static ? ' （静态）' : '') + (m.max_model_len ? ' · max_model_len ' + m.max_model_len : '') + (displayed ? '' : ' · 已屏蔽') + '">' +
+                        escText(m.id) + mml +
+                        '<button class="ep-block-btn" data-model="' + escAttr(m.id) + '" data-display="' + (displayed ? '1' : '0') + '" title="' + (displayed ? '屏蔽（持久化到配置）' : '取消屏蔽') + '">' + (displayed ? '✕' : '✓') + '</button>' +
+                        '</span>';
                 });
 
                 html += '<div class="ep-card">' +
@@ -1903,6 +2695,27 @@
             });
 
             container.innerHTML = html;
+            syncBatchButton();
+        }
+
+        // One delegated handler for every per-model block/unblock button.
+        (function () {
+            const list = document.getElementById('endpoints-list');
+            if (list) list.addEventListener('click', function (e) {
+                const btn = e.target.closest('.ep-block-btn');
+                if (!btn) return;
+                toggleModelDisplay(btn.getAttribute('data-model'), btn.getAttribute('data-display') !== '1');
+            });
+        })();
+
+        // Batch-persist block for every model matched by the current filter.
+        function batchBlockFiltered() {
+            const blockable = epFilteredModelIds.filter(function (id) {
+                return epModelDisplayed({ id: id });
+            });
+            if (!blockable.length) { showToast('筛选结果中没有可屏蔽的模型', 'info'); return; }
+            if (!confirm('确定屏蔽 ' + blockable.length + ' 个筛选出的模型？\n（持久化写入配置，/v1/models 将不再列出）')) return;
+            socket.emit('set_models_display_batch', { model_ids: blockable, is_displayed: false });
         }
 
         // ============ Actions ============
@@ -1913,8 +2726,240 @@
             if (btn) btn.classList.add('active');
             if (name === 'flow') { refreshModels(); renderFlowChart(); }
             if (name === 'endpoints') { requestEndpointHealth(); }
+            if (name === 'errors') { errSeenCount = serverErrors.length; updateErrBadge(); renderErrors(); }
+            if (name === 'ray') { loadRayStatus(); if (!rayTimer) rayTimer = setInterval(loadRayStatus, 10000); }
+            else if (rayTimer) { clearInterval(rayTimer); rayTimer = null; }
             if (name === 'config' && !configData) socket.emit('request_config');
             if (name === 'ccusage' && !ccusageData) loadCcusage(false);
+            if (name === 'perf') perfOnShow();
+        }
+
+        // ============ Ray cluster server status ============
+        let rayTimer = null;
+        function loadRayStatus() {
+            fetch('/ray_status').then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            }).then(function (d) {
+                renderRayStatus(d);
+            }).catch(function (e) {
+                const c = document.getElementById('ray-status-content');
+                if (c) c.innerHTML = '<p class="empty">无法获取 Ray 状态: ' + escText(e.message) + '</p>';
+            });
+        }
+        function fmtGiB(bytes) { return (bytes / 1073741824).toFixed(1) + ' GiB'; }
+        function fmtMib(mib) { return mib >= 1024 ? (mib / 1024).toFixed(1) + ' GiB' : mib + ' MiB'; }
+        function rayBar(pct) {
+            const p = Math.max(0, Math.min(100, pct || 0));
+            const color = p > 80 ? 'var(--red)' : (p > 50 ? 'var(--amber)' : 'var(--green)');
+            return '<div style="flex:1;height:8px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;">' +
+                '<div style="width:' + p + '%;height:100%;background:' + color + ';"></div></div>';
+        }
+        function rayUsageLabel(key) {
+            if (key === 'memory') return '内存';
+            if (key === 'object_store_memory') return '对象存储';
+            if (key.indexOf('accelerator_type:') === 0) return '加速卡 ' + key.slice(17);
+            if (key.indexOf('node:') === 0) return key;
+            return key;
+        }
+        function renderRayStatus(d) {
+            const gen = document.getElementById('ray-generated');
+            if (gen) gen.textContent = 'Ray 集群状态 · 更新于 ' + (d.generatedAt || '');
+            const c = document.getElementById('ray-status-content');
+            if (!c) return;
+            const nodes = d.nodes || [];
+            // 集群负载聚合（来自各节点实时数据）
+            let cpuSum = 0, cpuN = 0, memUsed = 0, memTotal = 0, utilSum = 0, utilN = 0, vramUsed = 0, vramTotal = 0;
+            nodes.forEach(function (n) {
+                if (n.cpu_percent != null) { cpuSum += n.cpu_percent; cpuN++; }
+                if (n.mem_used != null && n.mem_total) { memUsed += n.mem_used; memTotal += n.mem_total; }
+                (n.gpus || []).forEach(function (g) {
+                    if (g.util != null) { utilSum += g.util; utilN++; }
+                    if (g.mem_used != null && g.mem_total) { vramUsed += g.mem_used; vramTotal += g.mem_total; }
+                });
+            });
+            const cpuAvg = cpuN ? cpuSum / cpuN : 0;
+            const memPct = memTotal ? memUsed / memTotal * 100 : 0;
+            const utilAvg = utilN ? utilSum / utilN : 0;
+            const vramPct = vramTotal ? vramUsed / vramTotal * 100 : 0;
+
+            let html = '<canvas id="ray-history-chart" height="220" style="width:100%;height:220px;margin:0 10px 6px;"></canvas>';
+            html += '<div class="ray-section-title">集群负载</div><div class="ray-usage">';
+            html += '<div class="ray-usage-row"><span class="ray-usage-label">CPU（' + cpuN + ' 节点）</span>' + rayBar(cpuAvg) + '<span class="ray-usage-val">' + cpuAvg.toFixed(1) + '%</span></div>';
+            html += '<div class="ray-usage-row"><span class="ray-usage-label">内存（' + fmtGiB(memUsed) + ' / ' + fmtGiB(memTotal) + '）</span>' + rayBar(memPct) + '<span class="ray-usage-val">' + memPct.toFixed(1) + '%</span></div>';
+            html += '<div class="ray-usage-row"><span class="ray-usage-label">GPU 利用率（' + utilN + ' 卡）</span>' + rayBar(utilAvg) + '<span class="ray-usage-val">' + utilAvg.toFixed(1) + '%</span></div>';
+            html += '<div class="ray-usage-row"><span class="ray-usage-label">显存（' + fmtMib(vramUsed) + ' / ' + fmtMib(vramTotal) + '）</span>' + rayBar(vramPct) + '<span class="ray-usage-val">' + vramPct.toFixed(1) + '%</span></div>';
+            html += '</div>';
+            html += '<div class="ray-section-title">节点 (' + nodes.length + ')</div><div class="ray-nodes">';
+            nodes.forEach(function (n) {
+                html += '<div class="ray-node-card">' +
+                    '<div class="ray-node-head"><b>' + escText(n.hostname || '') + (n.ip ? ' <span class="ray-ip">' + escText(n.ip) + '</span>' : '') + '</b></div>' +
+                    '<div class="ray-stat-row"><span>CPU ' + (n.cpu_percent != null ? n.cpu_percent + '%' : '-') + '（' + (n.cpu_used != null ? n.cpu_used + ' / ' + n.cpu_total : '-') + ' 核）</span>' + rayBar(n.cpu_percent) + '</div>' +
+                    '<div class="ray-stat-row"><span>内存 ' + (n.mem_percent != null ? n.mem_percent + '%' : '-') + '（' + (n.mem_used != null ? fmtGiB(n.mem_used) + ' / ' + fmtGiB(n.mem_total) : '-') + '）</span>' + rayBar(n.mem_percent) + '</div>' +
+                    '<div class="ray-gpus">';
+                (n.gpus || []).forEach(function (g) {
+                    const memPct = g.mem_total > 0 ? (g.mem_used / g.mem_total * 100) : 0;
+                    html += '<div class="ray-gpu">' +
+                        '<div class="ray-gpu-title" title="' + escAttr(g.name || '') + '"><span class="ray-gpu-idx">GPU ' + g.index + '</span>' + escText(g.name || '') + '</div>' +
+                        '<div class="ray-gpu-row"><span class="ray-gpu-label">利用率</span>' + rayBar(g.util) + '<span class="ray-gpu-val">' + (g.util != null ? g.util + '%' : '-') + '</span></div>' +
+                        '<div class="ray-gpu-row"><span class="ray-gpu-label">显存</span>' + rayBar(g.mem_total > 0 ? (g.mem_used / g.mem_total * 100) : 0) + '<span class="ray-gpu-val">' + (g.mem_used != null ? fmtMib(g.mem_used) + ' / ' + fmtMib(g.mem_total) : '-') + '</span></div>' +
+                        '<div class="ray-gpu-stats">' +
+                            (g.temp != null ? '<span>温度 ' + g.temp + '°C</span>' : '') +
+                            (g.power_w != null ? '<span>功耗 ' + g.power_w + 'W</span>' : '') +
+                        '</div>' +
+                    '</div>';
+                });
+                html += '</div></div>';
+            });
+            html += '</div>';
+            c.innerHTML = html;
+            drawRayHistoryChart(d.history || []);
+        }
+
+        // 历史负载折线图（canvas，无外部依赖）
+        // 序列：CPU/内存/显存为集群聚合；GPU 利用率按服务器各一条曲线
+        function rayHistorySeries(history) {
+            const series = [
+                { get: p => p.cpu, label: 'CPU', color: '#818cf8' },
+                { get: p => p.mem, label: '内存', color: '#34d399' },
+                { get: p => p.vram, label: '显存', color: '#f472b6' }
+            ];
+            const gpuKeys = [];
+            history.forEach(function (p) {
+                Object.keys(p.gpu_nodes || {}).forEach(function (k) {
+                    if (gpuKeys.indexOf(k) === -1) gpuKeys.push(k);
+                });
+            });
+            gpuKeys.sort();
+            const GPU_COLORS = ['#fbbf24', '#fb7185', '#60a5fa', '#a78bfa', '#4ade80', '#f97316', '#22d3ee', '#e879f9'];
+            gpuKeys.forEach(function (k, i) {
+                series.push({ get: p => (p.gpu_nodes || {})[k], label: 'GPU·' + k, color: GPU_COLORS[i % GPU_COLORS.length] });
+            });
+            return series;
+        }
+        function drawRayHistoryChart(history) {
+            const canvas = document.getElementById('ray-history-chart');
+            if (!canvas) return;
+            const dpr = window.devicePixelRatio || 1;
+            const w = canvas.clientWidth || canvas.parentNode.clientWidth || 800;
+            const h = 220;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, w, h);
+
+            const padL = 34, padR = 10, padT = 10, padB = 32;
+            const cw = w - padL - padR, ch = h - padT - padB;
+
+            // 网格与刻度
+            ctx.strokeStyle = 'rgba(255,255,255,.08)';
+            ctx.fillStyle = '#5d6880';
+            ctx.font = '10px sans-serif';
+            ctx.textAlign = 'right';
+            for (let p = 0; p <= 100; p += 25) {
+                const y = padT + ch - ch * p / 100;
+                ctx.beginPath();
+                ctx.moveTo(padL, y);
+                ctx.lineTo(w - padR, y);
+                ctx.stroke();
+                ctx.fillText(p + '%', padL - 4, y + 3);
+            }
+
+            if (!history.length) {
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#5d6880';
+                ctx.fillText('历史数据采集中…（每 10 秒一个采样点）', w / 2, h / 2);
+                return;
+            }
+
+            const n = history.length;
+            const xAt = i => padL + (n === 1 ? cw / 2 : cw * i / (n - 1));
+            const yAt = v => padT + ch - ch * Math.max(0, Math.min(100, v)) / 100;
+
+            // 时间范围标注（首尾）
+            ctx.textAlign = 'left';
+            const t0 = new Date(history[0].ts * 1000);
+            const t1 = new Date(history[n - 1].ts * 1000);
+            const fmt = t => ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+            ctx.fillStyle = '#5d6880';
+            ctx.fillText(fmt(t0), padL, h - 4);
+            ctx.textAlign = 'right';
+            ctx.fillText(fmt(t1), w - padR, h - 4);
+            ctx.textAlign = 'center';
+            ctx.fillText('最近 ' + Math.round((history[n - 1].ts - history[0].ts) / 60) + ' 分钟', w / 2, h - 4);
+
+            rayHistorySeries(history).forEach(function (s) {
+                ctx.strokeStyle = s.color;
+                ctx.lineWidth = 1.6;
+                ctx.beginPath();
+                let started = false;
+                history.forEach(function (p, i) {
+                    const v = s.get(p);
+                    if (v == null) return;
+                    const x = xAt(i), y = yAt(v);
+                    if (!started) { ctx.moveTo(x, y); started = true; }
+                    else ctx.lineTo(x, y);
+                });
+                ctx.stroke();
+            });
+
+            // 图例（当前值）
+            const last = history[n - 1];
+            ctx.textAlign = 'left';
+            let lx = padL + 4;
+            rayHistorySeries(history).forEach(function (s) {
+                ctx.fillStyle = s.color;
+                ctx.fillRect(lx, h - 24, 8, 8);
+                ctx.fillStyle = '#8b96ad';
+                const v = s.get(last);
+                const text = s.label + ' ' + (v != null ? v + '%' : '-');
+                ctx.fillText(text, lx + 12, h - 16);
+                lx += ctx.measureText(text).width + 34;
+            });
+        }
+
+        // ============ Server error log ============
+        function updateErrBadge() {
+            const badge = document.getElementById('err-badge');
+            if (!badge) return;
+            const unseen = Math.max(0, serverErrors.length - errSeenCount);
+            badge.textContent = unseen;
+            badge.style.display = unseen > 0 ? '' : 'none';
+        }
+
+        function renderErrors() {
+            const container = document.getElementById('errors-list');
+            if (!container) return;
+            if (!serverErrors.length) {
+                container.innerHTML = '<p class="empty">暂无错误</p>';
+                return;
+            }
+            const kindLabels = {
+                upstream_timeout: '上游超时',
+                upstream_error: '上游连接失败',
+                upstream_http_error: '上游HTTP错误',
+                handler_exception: '服务端异常',
+                router_error: '路由拒绝'
+            };
+            container.innerHTML = serverErrors.map(function (e) {
+                const kindLabel = kindLabels[e.kind] || e.kind;
+                return '<div class="err-card">' +
+                    '<div class="err-head" onclick="this.parentNode.classList.toggle(\'open\')">' +
+                        '<span class="err-kind ' + escText(e.kind || '') + '">' + escText(kindLabel) + '</span>' +
+                        (e.status ? '<span class="err-status">' + escText(e.status) + '</span>' : '') +
+                        '<span class="err-msg">' + escText(e.message || '') + '</span>' +
+                        '<span class="err-time">' + escText((e.timestamp || '').replace('T', ' ').slice(0, 19)) + '</span>' +
+                    '</div>' +
+                    '<div class="err-meta">' +
+                        (e.method ? escText(e.method) + ' ' : '') + escText(e.url || '') +
+                        (e.endpoint ? ' · 端点 ' + escText(e.endpoint) : '') +
+                        (e.model ? ' · 模型 ' + escText(e.model) : '') +
+                        (e.remote_address ? ' · 来源 ' + escText(e.remote_address) : '') +
+                    '</div>' +
+                    (e.detail ? '<pre class="err-detail">' + escText(e.detail) + '</pre>' : '') +
+                '</div>';
+            }).join('');
         }
 
         function toggleModelDisplay(modelId, isVisible) { socket.emit('set_model_display', { model_id: modelId, is_displayed: isVisible }); }
@@ -1926,12 +2971,21 @@
         function toggleVisionRedirect(cb) {
             const alias = cb.getAttribute('data-vralias');
             if (cb.checked) {
-                const models = allModelsData.models || [];
-                const defaultTarget = (models.find(function (m) {
-                    return String(m.id).toLowerCase().indexOf('vision') !== -1 || String(m.original_id || '').toLowerCase().indexOf('vision') !== -1;
-                }) || {}).id;
-                setVisionRedirect(alias, defaultTarget || 'deepseek-v4-flash-vision-exp');
+                // Re-enable: reuse the remembered target if present, otherwise pick a vision-capable default.
+                const remembered = (visionRedirects || {})[alias] || '';
+                if (remembered) {
+                    setVisionRedirect(alias, remembered);
+                } else {
+                    const models = allModelsData.models || [];
+                    const defaultTarget = (models.find(function (m) {
+                        return String(m.id).toLowerCase().indexOf('vision') !== -1 || String(m.original_id || '').toLowerCase().indexOf('vision') !== -1;
+                    }) || {}).id;
+                    setVisionRedirect(alias, defaultTarget || 'deepseek-v4-flash-vision-exp');
+                }
             } else {
+                // Disable but keep the entry + remembered target in config
+                // (server adds it to model_vision_disabled), so it can be
+                // re-enabled anytime without re-picking the target.
                 setVisionRedirect(alias, '');
             }
         }
@@ -1967,6 +3021,1053 @@
         function trimList(list, max) {
             while (list.children.length > max) list.lastElementChild.remove();
         }
+
+
+        // ============ Perf test (推理性能测试) ============
+        // Integrated from chaoshen999's standalone LLM inference benchmark tool.
+        // Everything that tool asks you to type — request URL, model name, API key —
+        // the proxy already knows, so nothing has to be filled in here: requests go
+        // to this same origin, either through the aggregated router
+        // (/v1/chat/completions) or straight at one endpoint
+        // (/<prefix>/v1/chat/completions), where the proxy injects that endpoint's
+        // own api_key. Every request also shows up in 实时监控 while it runs.
+        const PERF_KEY = 'proxy_perf_test_cfg';
+        const PERF_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+        const PERF_FIELDS = ['target', 'model', 'apikey', 'min', 'max', 'step', 'stepmode', 'out', 'conc',
+            'struct', 'extra', 'usage', 'processor', 'mainboard', 'memory', 'gpu', 'system', 'engine', 'enginemodel'];
+        // Derived from the picked endpoint/model unless the user typed something.
+        const PERF_DERIVED = ['engine', 'enginemodel'];
+        let perfTesting = false;
+        let perfAbort = null;
+        let perfResults = [];
+        let perfStartTime = null;
+        let perfInited = false;
+
+        function perfEl(id) { return document.getElementById('perf-' + id); }
+        function perfVal(id) {
+            const el = perfEl(id);
+            if (!el) return '';
+            return el.type === 'checkbox' ? el.checked : el.value;
+        }
+        function perfNum(id, dflt) {
+            const v = parseFloat(perfVal(id));
+            return isNaN(v) ? dflt : v;
+        }
+
+        function perfOnShow() {
+            if (!perfInited) { perfInit(); perfInited = true; return; }
+            perfRebuildTargets();
+            perfRebuildModels();
+            perfSyncMeta();
+        }
+
+        function perfInit() {
+            perfRebuildTargets();
+            const saved = perfReadCfg();
+            PERF_FIELDS.forEach(function (id) {
+                if (id === 'model') return;              // restored after the model list is built
+                if (!(id in saved)) return;
+                const el = perfEl(id);
+                if (!el) return;
+                if (el.type === 'checkbox') el.checked = !!saved[id];
+                else el.value = saved[id];
+                if (PERF_DERIVED.indexOf(id) !== -1 && saved[id]) el.dataset.touched = '1';
+            });
+            perfRebuildModels(saved.model);
+            PERF_FIELDS.forEach(function (id) {
+                const el = perfEl(id);
+                if (!el) return;
+                el.addEventListener('change', perfOnFieldChange);
+                if (el.tagName !== 'SELECT' && el.type !== 'checkbox') el.addEventListener('input', perfOnFieldChange);
+            });
+            perfEl('target').addEventListener('change', function () { perfRebuildModels(); perfSyncMeta(true); });
+            perfEl('model').addEventListener('change', function () { perfSyncMeta(true); });
+            PERF_DERIVED.forEach(function (id) {
+                const el = perfEl(id);
+                if (el) el.addEventListener('input', function () { el.dataset.touched = '1'; });
+            });
+            perfSyncMeta();
+            perfRenderTable();
+            perfDrawCharts();
+        }
+
+        function perfOnFieldChange() { perfSaveCfg(); perfSyncMeta(); }
+
+        function perfReadCfg() {
+            try { return JSON.parse(localStorage.getItem(PERF_KEY) || '{}') || {}; } catch (e) { return {}; }
+        }
+        function perfSaveCfg() {
+            const data = {};
+            // 'apikey' is deliberately not persisted — it is a secret and is
+            // normally empty anyway (the monitor talks to the proxy same-origin).
+            PERF_FIELDS.forEach(function (id) { if (id !== 'apikey' && perfEl(id)) data[id] = perfVal(id); });
+            try { localStorage.setItem(PERF_KEY, JSON.stringify(data)); } catch (e) { /* quota / private mode */ }
+        }
+
+        // ---- Endpoint & model pickers, fed by the proxy's own model cache ----
+        function perfRebuildTargets() {
+            const sel = perfEl('target');
+            if (!sel) return;
+            const cur = sel.value;
+            let html = '<option value="">本代理聚合路由 · /v1/chat/completions</option>';
+            (allModelsData.endpoints || []).forEach(function (ep) {
+                const prefix = ep.proxy_path_prefix || '';
+                const base = (ep.target_base_url || '').trim();
+                if (!prefix || !base) return;            // virtual /__proxy__ has no upstream of its own
+                html += '<option value="' + escAttr(prefix) + '">' + escText(prefix) + ' · ' + escText(base) + '</option>';
+            });
+            sel.innerHTML = html;
+            if (cur) sel.value = cur;
+            if (sel.selectedIndex < 0) sel.value = '';
+        }
+
+        function perfModelsFor(prefix) {
+            const out = [], seen = {};
+            (allModelsData.models || []).forEach(function (m) {
+                let value, route;
+                if (!prefix) {
+                    if (m.is_displayed === false) return;   // blocked models are not routable
+                    value = m.id;
+                    route = m.current_route || m.source_endpoint || '';
+                } else {
+                    const avail = m.available_endpoints || [m.source_endpoint];
+                    if (avail.indexOf(prefix) === -1 && m.source_endpoint !== prefix) return;
+                    value = m.original_id || m.id;          // backends only know their own ids
+                    route = prefix;
+                }
+                if (!value || seen[value]) return;
+                seen[value] = 1;
+                out.push({ value: value, route: route, mml: m.max_model_len, id: m.id });
+            });
+            out.sort(function (a, b) { return a.value.localeCompare(b.value); });
+            return out;
+        }
+
+        function perfRebuildModels(preferred) {
+            const sel = perfEl('model');
+            if (!sel) return;
+            const want = preferred || sel.value;
+            const list = perfModelsFor(perfVal('target'));
+            if (!list.length) {
+                sel.innerHTML = '<option value="">（暂无模型，等待代理同步…）</option>';
+                return;
+            }
+            sel.innerHTML = list.map(function (m) {
+                const mml = m.mml ? '  ·  ' + (m.mml >= 1024 ? Math.round(m.mml / 1024) + 'k ctx' : m.mml + ' ctx') : '';
+                return '<option value="' + escAttr(m.value) + '">' + escText(m.value + mml) + '</option>';
+            }).join('');
+            if (want) sel.value = want;
+            if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+        }
+
+        function perfRequestUrl() {
+            const prefix = (perfVal('target') || '').trim();
+            if (!prefix) return '/v1/chat/completions';
+            return '/' + prefix.replace(/^\/+|\/+$/g, '') + '/v1/chat/completions';
+        }
+
+        function perfEndpointOf(prefix) {
+            return (allModelsData.endpoints || []).filter(function (ep) { return ep.proxy_path_prefix === prefix; })[0] || null;
+        }
+
+        // Where the aggregated router will actually send the picked model.
+        function perfResolvedRoute() {
+            const prefix = perfVal('target');
+            if (prefix) return prefix;
+            const model = perfVal('model');
+            const entry = perfModelsFor('').filter(function (m) { return m.value === model; })[0];
+            return entry ? (entry.route || '') : '';
+        }
+
+        function perfSyncMeta(force) {
+            const urlEl = perfEl('url');
+            if (!urlEl) return;
+            urlEl.textContent = perfRequestUrl();
+
+            const route = perfResolvedRoute();
+            const ep = perfEndpointOf(route);
+            const model = perfVal('model');
+            const routeEl = perfEl('route');
+            if (routeEl) {
+                if (!perfVal('target')) {
+                    routeEl.innerHTML = route
+                        ? '聚合路由将把 <b>' + escText(model) + '</b> 转发到 <b>' + escText(route) + '</b>' +
+                          (ep && ep.target_base_url ? '（' + escText(ep.target_base_url) + '）' : '')
+                        : '由代理按模型路由自动选择上游端点';
+                } else {
+                    routeEl.innerHTML = '直连该端点，代理自动注入其 api_key' +
+                        (ep && ep.api_key ? '（已配置密钥）' : '');
+                }
+            }
+
+            // Engine fields are derived from the route/model until the user edits them.
+            const engineEl = perfEl('engine'), engineModelEl = perfEl('enginemodel');
+            if (engineEl && (force || !engineEl.dataset.touched)) {
+                if (force) delete engineEl.dataset.touched;
+                engineEl.value = route ? route.replace(/^\//, '') + (ep && ep.target_base_url ? ' (' + ep.target_base_url + ')' : '') : 'API Proxy';
+            }
+            if (engineModelEl && (force || !engineModelEl.dataset.touched)) {
+                if (force) delete engineModelEl.dataset.touched;
+                engineModelEl.value = model || '';
+            }
+            perfRenderSummary();
+        }
+
+        function perfRenderSummary() {
+            const el = perfEl('summary');
+            if (!el) return;
+            const hw = ['processor', 'mainboard', 'memory', 'gpu', 'system']
+                .map(function (id) { return perfVal(id); }).filter(Boolean).join(' · ');
+            const parts = [];
+            parts.push('<div>入口：<b>' + escText(perfRequestUrl()) + '</b>　模型：<b>' + escText(perfVal('model') || '—') + '</b>　并发：<b>' + escText(perfVal('conc') || '1') + '</b></div>');
+            parts.push('<div>引擎：<b>' + escText(perfVal('engine') || '—') + '</b>　引擎模型：<b>' + escText(perfVal('enginemodel') || '—') + '</b></div>');
+            if (hw) parts.push('<div>硬件：' + escText(hw) + '</div>');
+            if (perfStartTime) parts.push('<div>测试开始：' + escText(perfStartTime.toLocaleString()) + '</div>');
+            el.innerHTML = parts.join('');
+        }
+
+        // Ray already reports the cluster hardware — reuse it instead of typing it.
+        function perfFillFromRay() {
+            fetch('/ray_status').then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            }).then(function (d) {
+                const nodes = d.nodes || [];
+                if (!nodes.length) { showToast('Ray 未返回节点信息', 'error'); return; }
+                let cpuTotal = 0, memTotal = 0;
+                const gpuCount = {}, hosts = [];
+                nodes.forEach(function (n) {
+                    if (n.cpu_total) cpuTotal += n.cpu_total;
+                    if (n.mem_total) memTotal += n.mem_total;
+                    if (n.hostname) hosts.push(n.hostname);
+                    (n.gpus || []).forEach(function (g) {
+                        const name = g.name || 'GPU';
+                        gpuCount[name] = (gpuCount[name] || 0) + 1;
+                    });
+                });
+                const gpuText = Object.keys(gpuCount).map(function (k) { return k + ' ×' + gpuCount[k]; }).join(' + ');
+                if (cpuTotal) perfEl('processor').value = cpuTotal + ' 逻辑核心 · ' + nodes.length + ' 节点';
+                if (memTotal) perfEl('memory').value = (memTotal / 1073741824).toFixed(0) + ' GiB';
+                if (gpuText) perfEl('gpu').value = gpuText;
+                if (hosts.length) perfEl('system').value = hosts.join(', ');
+                perfSaveCfg();
+                perfRenderSummary();
+                showToast('已从 Ray 集群填充硬件信息', 'success');
+            }).catch(function (e) {
+                showToast('读取 Ray 状态失败: ' + e.message, 'error');
+            });
+        }
+
+        // ---- Token counting (same rule set as the standalone tool) ----
+        function perfCountTokens(text) {
+            const specialApostropheWords = ["'cause", "'em", "'kay", "'nother", "'round", "'scuse", "'sup", "'til"];
+            const oneTokenWords = ["don't", "can't", "won't"];
+            const twoTokenWords = [
+                "I'm", "we're", "you're", "they're", "I've", "we've", "you've", "they've",
+                "I'd", "we'd", "you'd", "he'd", "she'd", "they'd",
+                "I'll", "we'll", "you'll", "he'll", "she'll", "they'll",
+                "isn't", "aren't", "wasn't", "weren't", "doesn't", "didn't", "hasn't", "haven't",
+                "shouldn't", "wouldn't", "couldn't",
+                "it's", "he's", "she's", "that's", "there's", "who's"
+            ];
+            let tokens = [], t = text || '';
+            specialApostropheWords.concat(oneTokenWords).forEach(function (word) {
+                const reg = new RegExp(word.replace("'", "\\'"), 'gi');
+                t = t.replace(reg, function (m) { tokens.push(m); return ' '.repeat(m.length); });
+            });
+            twoTokenWords.forEach(function (word) {
+                const reg = new RegExp(word.replace("'", "\\'"), 'gi');
+                t = t.replace(reg, function (m) {
+                    const parts = m.split(/'/);
+                    tokens.push(parts[0]);
+                    tokens.push("'" + parts[1]);
+                    return ' '.repeat(m.length);
+                });
+            });
+            const enPunct = /[,.!?;:'"()\[\]{}]/;
+            const cnPunct = /[，。！？；：‘’“”（）【】｛｝]/;
+            const isSeparator = function (ch) {
+                return ch === ' ' || enPunct.test(ch) || cnPunct.test(ch) || ch === '\n' || ch === '\t' || ch === '\r';
+            };
+            let buffer = '', i = 0;
+            while (i < t.length) {
+                const ch = t[i];
+                if (isSeparator(ch)) {
+                    if (buffer.length) { tokens.push(buffer); buffer = ''; }
+                    if (ch !== ' ' && ch !== '\t' && ch !== '\r') tokens.push(ch);
+                    i++; continue;
+                }
+                if (/[0-9]/.test(ch)) {
+                    if (buffer.length) { tokens.push(buffer); buffer = ''; }
+                    tokens.push(ch);
+                    i++; continue;
+                }
+                buffer += ch;
+                i++;
+            }
+            if (buffer.length) tokens.push(buffer);
+            return tokens.filter(function (x) { return x && x.length; }).length;
+        }
+
+        function perfSystemPrompt() { return 'You are a assistant.'; }
+
+        function perfUserPrompt(length) {
+            const fixed = '\nRepeat the above content one hundred times.';
+            const need = length - perfCountTokens(fixed);
+            let prompt = '';
+            for (let i = 0; i < need; i++) {
+                if (i > 0) prompt += ' ';
+                prompt += PERF_WORDS[Math.floor(Math.random() * PERF_WORDS.length)];
+            }
+            return prompt + fixed;
+        }
+
+        function perfErrMsg(err) {
+            const msg = (err && err.message) || '未知错误';
+            if (err && err.name === 'AbortError') return '请求已中止';
+            if (msg.indexOf('Failed to fetch') !== -1) return '无法连接到代理，请检查服务是否运行';
+            return msg;
+        }
+
+        // ---- One streamed request ----
+        async function perfExec(url, model, apiKey, systemPrompt, userPrompt, inputLength, maxOut, extra, useUsage, signal) {
+            const sysLen = perfCountTokens(systemPrompt);
+            const usrLen = userPrompt ? perfCountTokens(userPrompt) : 0;
+            const fail = function (message) {
+                return {
+                    inputLength: inputLength, realInputLength: inputLength,
+                    prefillTime: 0, prefillSpeed: 0, outputLength: 0, outputTime: 0, outputSpeed: 0,
+                    systemPrompt: systemPrompt, systemPromptLength: sysLen,
+                    userPrompt: userPrompt || '', userPromptLength: usrLen,
+                    output: '', error: true, errorMessage: message
+                };
+            };
+            let streamChunks = 0, srvCompletion = 0, srvPrompt = 0, output = '';
+            let tReq, tResp, tFirst, tEnd;
+            try {
+                const headers = { 'Content-Type': 'application/json' };
+                if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+                const body = Object.assign({
+                    model: model,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    max_tokens: maxOut,
+                    temperature: 1,
+                    top_p: 0.1,
+                    stream: true
+                }, useUsage ? { stream_options: { include_usage: true } } : {}, extra);
+
+                tReq = performance.now();
+                const resp = await fetch(url, {
+                    method: 'POST', headers: headers, body: JSON.stringify(body), signal: signal
+                });
+                if (!resp.ok) {
+                    let detail = '';
+                    try { detail = (await resp.text()).slice(0, 200); } catch (e) { /* body already consumed */ }
+                    return fail('HTTP ' + resp.status + (detail ? ' · ' + detail : ''));
+                }
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buf = '';
+                while (true) {
+                    const chunk = await reader.read();
+                    tResp = performance.now();
+                    if (chunk.done) { if (!tEnd) tEnd = tResp; break; }
+                    buf += decoder.decode(chunk.value, { stream: true });
+                    const lines = buf.split('\n');
+                    buf = lines.pop();
+                    for (const line of lines) {
+                        const s = line.trim();
+                        if (!s || s.indexOf('data:') !== 0) continue;
+                        const payload = s.slice(5).trim();
+                        if (payload === '[DONE]') { tEnd = tResp; continue; }
+                        let json;
+                        try { json = JSON.parse(payload); } catch (e) { continue; }
+                        const choice = json.choices && json.choices[0];
+                        const delta = (choice && (choice.delta || choice.message)) || null;
+                        const piece = delta ? (delta.content || delta.reasoning || delta.reasoning_content || '') : '';
+                        if (piece) {
+                            output += piece;
+                            streamChunks++;
+                            if (!tFirst) tFirst = tResp;
+                        }
+                        if (json.usage) {
+                            if (json.usage.completion_tokens) srvCompletion = json.usage.completion_tokens;
+                            if (json.usage.prompt_tokens) srvPrompt = json.usage.prompt_tokens;
+                        }
+                    }
+                }
+                if (!tFirst) return fail('未收到任何输出内容（上游可能拒绝了请求）');
+
+                const prefillTime = tFirst - tReq;
+                const outputTime = (tEnd || tResp) - tFirst;
+                // A streamed SSE chunk may contain zero, one, or several model
+                // tokens.  Only use the upstream usage count as authoritative;
+                // otherwise fall back to the local tokenizer estimate rather
+                // than incorrectly treating chunks as tokens.
+                const outputLength = srvCompletion > 0 ? srvCompletion : perfCountTokens(output);
+                // Prefer the upstream's own prompt_tokens over the local estimate.
+                const realIn = srvPrompt > 0 ? srvPrompt : inputLength;
+                return {
+                    inputLength: inputLength,
+                    realInputLength: realIn,
+                    prefillTime: prefillTime,
+                    prefillSpeed: prefillTime > 0 ? realIn / (prefillTime / 1000) : 0,
+                    outputLength: outputLength,
+                    outputTime: outputTime,
+                    outputSpeed: outputTime > 0 ? outputLength / (outputTime / 1000) : 0,
+                    requestStart: tReq,
+                    firstTokenAt: tFirst,
+                    requestEnd: tEnd || tResp,
+                    streamChunks: streamChunks,
+                    systemPrompt: systemPrompt, systemPromptLength: sysLen,
+                    userPrompt: userPrompt, userPromptLength: usrLen,
+                    output: output, error: false
+                };
+            } catch (err) {
+                return fail(perfErrMsg(err));
+            }
+        }
+
+        // ---- Test run ----
+        function perfToggle() { perfTesting ? perfStop() : perfStart(); }
+
+        function perfSetRunning(running) {
+            perfTesting = running;
+            const btn = perfEl('start');
+            btn.textContent = running ? '停止测试' : '开始测试';
+            btn.classList.toggle('danger', running);
+            btn.classList.toggle('primary', !running);
+            if (!running) perfProgress('');
+        }
+
+        function perfProgress(text) {
+            const el = perfEl('progress');
+            if (!el) return;
+            el.textContent = text || '';
+            el.classList.toggle('perf-run', !!text);
+        }
+
+        function perfStop() {
+            perfSetRunning(false);
+            if (perfAbort) { perfAbort.abort(); perfAbort = null; }
+        }
+
+        function perfPlan(min, max, step, mode) {
+            const lens = [];
+            let cur = min;
+            while (cur <= max && lens.length < 64) {
+                lens.push(Math.round(cur));
+                const next = mode === 'add' ? cur + step : cur * step;
+                if (next <= cur) break;
+                cur = next;
+            }
+            return lens;
+        }
+
+        async function perfStart() {
+            const url = perfRequestUrl();
+            const model = perfVal('model');
+            const apiKey = perfVal('apikey');
+            const min = perfNum('min', NaN), max = perfNum('max', NaN);
+            const step = perfNum('step', NaN), mode = perfVal('stepmode') || 'mul';
+            const maxOut = perfNum('out', NaN), conc = parseInt(perfVal('conc'), 10) || 1;
+            const struct = perfVal('struct') === '' ? 0 : perfNum('struct', 0);
+            const useUsage = !!perfVal('usage');
+
+            let extra = {};
+            const extraText = (perfVal('extra') || '').trim();
+            if (extraText) {
+                try { extra = JSON.parse(extraText); }
+                catch (e) { showToast('额外参数 JSON 解析失败：' + e.message, 'error'); return; }
+            }
+            if (!model) { showToast('请先选择模型', 'error'); return; }
+            if (isNaN(min) || isNaN(max) || isNaN(step) || isNaN(maxOut)) { showToast('请填写完整的测试参数', 'error'); return; }
+            if (min < 20) { showToast('输入长度最小值需要 ≥ 20', 'error'); return; }
+            if (max < min) { showToast('输入长度最大值需要 ≥ 最小值', 'error'); return; }
+            if (mode === 'mul' ? step <= 1 : step < 1) { showToast(mode === 'mul' ? '倍增步长需要 > 1' : '递增步长需要 ≥ 1', 'error'); return; }
+            if (maxOut < 3) { showToast('输出长度需要 ≥ 3', 'error'); return; }
+            if (conc < 1 || conc > 100) { showToast('并发数需要在 1-100 之间', 'error'); return; }
+
+            perfSaveCfg();
+            perfResults = [];
+            perfStartTime = new Date();
+            perfRenderTable();
+            perfDrawCharts();
+            perfSetRunning(true);
+            perfAbort = new AbortController();
+            const signal = perfAbort.signal;
+
+            const lens = perfPlan(min, max, step, mode);
+            const systemPrompt = perfSystemPrompt();
+            const sysLen = perfCountTokens(systemPrompt);
+
+            // Warm up the HTTP path (connection + upstream model load) first.
+            perfProgress('预热连接…');
+            try {
+                await fetch(url, {
+                    method: 'POST',
+                    headers: Object.assign({ 'Content-Type': 'application/json' }, apiKey ? { Authorization: 'Bearer ' + apiKey } : {}),
+                    body: JSON.stringify(Object.assign({
+                        model: model,
+                        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: perfUserPrompt(10) }],
+                        max_tokens: 3, temperature: 0.1, top_p: 0.1, stream: true
+                    }, extra)),
+                    signal: signal
+                }).then(function (r) { return r.body ? r.body.getReader().read().then(function () { return r.body.cancel(); }) : null; });
+            } catch (e) { /* warm-up failures are not fatal */ }
+
+            for (let idx = 0; idx < lens.length; idx++) {
+                if (!perfTesting) break;
+                const inputLength = lens[idx];
+                perfProgress('测试中 · 输入长度 ' + inputLength + '（' + (idx + 1) + '/' + lens.length + '）· 并发 ' + conc);
+
+                const userLen = Math.max(1, inputLength - sysLen - struct);
+                // Build prompts before starting the batch clock. Large prompts
+                // can take measurable time to construct in the browser, but that
+                // is client preparation rather than proxy/model latency.
+                const prompts = [];
+                for (let i = 0; i < conc; i++) prompts.push(perfUserPrompt(userLen));
+                // One common clock is required for batch throughput. Per-request
+                // decode durations cannot be added or compared with max(): their
+                // intervals may be concurrent, partially overlap, or be queued.
+                const batchStart = performance.now();
+                const jobs = [];
+                for (let i = 0; i < conc; i++) {
+                    jobs.push(perfExec(url, model, apiKey, systemPrompt, prompts[i],
+                        inputLength, maxOut, extra, useUsage, signal));
+                }
+                const all = await Promise.all(jobs);
+                const batchSettled = performance.now();
+                if (!perfTesting) break;
+
+                const ok = all.filter(function (r) { return !r.error; });
+                const bad = all.filter(function (r) { return r.error; });
+                let row;
+                if (!ok.length) {
+                    row = {
+                        inputLength: inputLength, error: true, concurrency: conc,
+                        errorMessage: bad.length ? bad[0].errorMessage : '未知错误',
+                        systemPrompt: systemPrompt, systemPromptLength: sysLen,
+                        userPromptLength: userLen, allResults: all,
+                        successCount: 0, errorCount: bad.length
+                    };
+                } else {
+                    const avg = function (fn) { return ok.reduce(function (s, r) { return s + fn(r); }, 0) / ok.length; };
+                    const maxPrefill = Math.max.apply(null, ok.map(function (r) { return r.prefillTime; }));
+                    const maxOutput = Math.max.apply(null, ok.map(function (r) { return r.outputTime; }));
+                    const totalIn = ok.reduce(function (s, r) { return s + r.realInputLength; }, 0);
+                    const totalOut = ok.reduce(function (s, r) { return s + r.outputLength; }, 0);
+                    const lastFirst = Math.max.apply(null, ok.map(function (r) { return r.firstTokenAt || batchSettled; }));
+                    const firstFirst = Math.min.apply(null, ok.map(function (r) { return r.firstTokenAt || batchSettled; }));
+                    const lastEnd = Math.max.apply(null, ok.map(function (r) { return r.requestEnd || batchSettled; }));
+                    const batchPrefillTime = Math.max(0, lastFirst - batchStart);
+                    const batchTotalTime = Math.max(0, lastEnd - batchStart);
+                    const decodeWindowTime = Math.max(0, lastEnd - firstFirst);
+                    row = {
+                        inputLength: inputLength,
+                        realInputLength: Math.round(avg(function (r) { return r.realInputLength; })),
+                        prefillTime: avg(function (r) { return r.prefillTime; }),
+                        prefillSpeed: avg(function (r) { return r.prefillSpeed; }),
+                        outputLength: Math.round(avg(function (r) { return r.outputLength; })),
+                        outputTime: avg(function (r) { return r.outputTime; }),
+                        outputSpeed: avg(function (r) { return r.outputSpeed; }),
+                        // Batch input rate runs until every successful request has
+                        // produced its first token. Actual output throughput uses
+                        // the complete wall-clock batch interval, including queue
+                        // and prefill time, so serial work is no longer multiplied
+                        // by the requested concurrency.
+                        totalPrefillSpeed: batchPrefillTime > 0 ? totalIn / (batchPrefillTime / 1000) : 0,
+                        totalOutputSpeed: batchTotalTime > 0 ? totalOut / (batchTotalTime / 1000) : 0,
+                        batchPrefillTime: batchPrefillTime,
+                        batchTotalTime: batchTotalTime,
+                        decodeWindowTime: decodeWindowTime,
+                        decodeWindowSpeed: decodeWindowTime > 0 ? totalOut / (decodeWindowTime / 1000) : 0,
+                        minPrefillTime: Math.min.apply(null, ok.map(function (r) { return r.prefillTime; })),
+                        maxPrefillTime: maxPrefill,
+                        minOutputTime: Math.min.apply(null, ok.map(function (r) { return r.outputTime; })),
+                        maxOutputTime: maxOutput,
+                        systemPrompt: systemPrompt, systemPromptLength: sysLen,
+                        userPrompt: ok[0].userPrompt, userPromptLength: userLen,
+                        output: ok[0].output, error: false, concurrency: conc,
+                        successCount: ok.length, errorCount: bad.length,
+                        allResults: all
+                    };
+                }
+                perfResults.push(row);
+                perfRenderTable();
+                perfDrawCharts();
+                perfRenderSummary();
+                await new Promise(function (r) { setTimeout(r, 1000); });
+            }
+
+            const finished = perfTesting;
+            perfSetRunning(false);
+            perfAbort = null;
+            if (finished) showToast('性能测试完成，共 ' + perfResults.length + ' 组', 'success');
+        }
+
+        function perfClear() {
+            if (perfTesting) { showToast('请先停止测试', 'error'); return; }
+            perfResults = [];
+            perfStartTime = null;
+            perfRenderTable();
+            perfDrawCharts();
+            perfRenderSummary();
+        }
+
+        // ---- Result table ----
+        function perfFix(v, digits) {
+            if (v === undefined || v === null || v === '' || isNaN(v)) return '-';
+            return Number(v).toFixed(digits === undefined ? 2 : digits);
+        }
+
+        function perfRenderTable() {
+            const tb = perfEl('tbody');
+            if (!tb) return;
+            if (!perfResults.length) {
+                tb.innerHTML = '<tr><td colspan="10"><p class="empty">尚无测试数据，点击「开始测试」</p></td></tr>';
+                return;
+            }
+            tb.innerHTML = perfResults.map(function (r, i) {
+                if (r.error) {
+                    return '<tr><td class="num">' + r.inputLength + '</td>' +
+                        '<td colspan="8" style="color:var(--red);">' + escText(r.errorMessage || '错误') + '</td>' +
+                        '<td><button class="perf-mini-btn" onclick="perfDetail(' + i + ')">详情</button></td></tr>';
+                }
+                const conc = r.concurrency || 1;
+                return '<tr>' +
+                    '<td class="num">' + r.inputLength + (r.realInputLength && r.realInputLength !== r.inputLength ? ' <span style="color:var(--text-faint);font-weight:500;">(' + r.realInputLength + ')</span>' : '') + '</td>' +
+                    '<td>' + perfFix(r.prefillTime) + '</td>' +
+                    '<td class="num" style="color:var(--blue);">' + perfFix(r.prefillSpeed) + '</td>' +
+                    '<td>' + (conc > 1 ? perfFix(r.totalPrefillSpeed) : '-') + '</td>' +
+                    '<td>' + r.outputLength + '</td>' +
+                    '<td>' + perfFix(r.outputTime) + '</td>' +
+                    '<td class="num" style="color:var(--green);">' + perfFix(r.outputSpeed) + '</td>' +
+                    '<td>' + (conc > 1 ? perfFix(r.totalOutputSpeed) : '-') + '</td>' +
+                    '<td>' + conc + (r.errorCount ? ' <span style="color:var(--red);">(' + r.errorCount + ' 失败)</span>' : '') + '</td>' +
+                    '<td><button class="perf-mini-btn" onclick="perfDetail(' + i + ')">详情</button></td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function perfDetail(i) {
+            const r = perfResults[i];
+            if (!r) return;
+            const conc = r.concurrency || 1;
+            const kv = [];
+            kv.push(['输入长度', r.inputLength]);
+            if (r.realInputLength) kv.push(['实际 prompt_tokens', r.realInputLength]);
+            kv.push(['系统提示词长度', r.systemPromptLength]);
+            kv.push(['用户提示词长度', r.userPromptLength]);
+            if (!r.error) {
+                kv.push(['输出长度', r.outputLength]);
+                kv.push(['预填充耗时', perfFix(r.prefillTime) + ' ms']);
+                kv.push(['每请求平均预填充速度', perfFix(r.prefillSpeed) + ' token/s']);
+                kv.push(['输出耗时', perfFix(r.outputTime) + ' ms']);
+                kv.push(['每请求平均输出速度', perfFix(r.outputSpeed) + ' token/s']);
+                if (conc > 1) {
+                    kv.push(['并发数', conc]);
+                    kv.push(['成功 / 失败', r.successCount + ' / ' + r.errorCount]);
+                    kv.push(['预填充耗时范围', perfFix(r.minPrefillTime) + ' ~ ' + perfFix(r.maxPrefillTime) + ' ms']);
+                    kv.push(['输出耗时范围', perfFix(r.minOutputTime) + ' ~ ' + perfFix(r.maxOutputTime) + ' ms']);
+                    kv.push(['批次首字阶段', perfFix(r.batchPrefillTime) + ' ms']);
+                    kv.push(['整轮墙钟耗时', perfFix(r.batchTotalTime) + ' ms']);
+                    kv.push(['解码活动窗口', perfFix(r.decodeWindowTime) + ' ms']);
+                    kv.push(['预填充批次吞吐', perfFix(r.totalPrefillSpeed) + ' token/s']);
+                    kv.push(['解码窗口吞吐', perfFix(r.decodeWindowSpeed) + ' token/s']);
+                    kv.push(['整轮输出吞吐', perfFix(r.totalOutputSpeed) + ' token/s']);
+                }
+            } else {
+                kv.push(['错误', r.errorMessage || '未知错误']);
+            }
+
+            const errs = (r.allResults || []).filter(function (x) { return x.error; });
+            let html = '<div class="perf-modal-box" onclick="event.stopPropagation()">' +
+                '<div class="perf-modal-head"><h3>第 ' + (i + 1) + ' 组 · 输入长度 ' + r.inputLength + '</h3>' +
+                '<div class="spacer" style="flex:1"></div><button class="btn" onclick="perfCloseDetail()">关闭</button></div>' +
+                '<div class="perf-kv">' + kv.map(function (p) {
+                    return '<span>' + escText(p[0]) + '：<b>' + escText(String(p[1])) + '</b></span>';
+                }).join('') + '</div>';
+            if (errs.length) {
+                html += '<div class="perf-pre-label">失败请求（' + errs.length + '）</div><div class="perf-pre">' +
+                    escText(errs.map(function (e) { return e.errorMessage; }).join('\n')) + '</div>';
+            }
+            html += '<div class="perf-pre-label">系统提示词</div><div class="perf-pre">' + escText(r.systemPrompt || '') + '</div>';
+            html += '<div class="perf-pre-label">用户提示词</div><div class="perf-pre">' + escText(r.userPrompt || '') + '</div>';
+            html += '<div class="perf-pre-label">模型输出</div><div class="perf-pre">' + escText(r.output || '') + '</div>';
+            html += '</div>';
+
+            const overlay = document.createElement('div');
+            overlay.className = 'perf-modal';
+            overlay.id = 'perf-modal';
+            overlay.innerHTML = html;
+            overlay.addEventListener('click', perfCloseDetail);
+            document.body.appendChild(overlay);
+        }
+
+        function perfCloseDetail() {
+            const el = document.getElementById('perf-modal');
+            if (el) el.remove();
+        }
+
+        // ---- Charts (canvas, adapted from the standalone tool) ----
+        const PERF_THEME_DARK = { bg: '#0d121d', text: '#e6ebf5', dim: '#8b96ad', grid: 'rgba(255,255,255,.08)', axis: '#3a4560' };
+        const PERF_THEME_LIGHT = { bg: '#ffffff', text: '#111827', dim: '#4b5563', grid: '#e5e7eb', axis: '#111827' };
+
+        function perfChartLines(theme) {
+            const xs = perfResults.filter(function (r) { return !r.error; });
+            const conc = perfResults.length ? (perfResults[0].concurrency || 1) : 1;
+            return {
+                x: xs.map(function (r) { return r.inputLength; }),
+                conc: conc,
+                prefill: conc > 1
+                    ? [{ data: xs.map(function (r) { return r.prefillSpeed; }), label: '并发中每请求平均', color: '#60a5fa' },
+                       { data: xs.map(function (r) { return r.totalPrefillSpeed; }), label: conc + ' 并发批次吞吐', color: '#a78bfa' }]
+                    : [{ data: xs.map(function (r) { return r.prefillSpeed; }), label: '预填充速度', color: '#60a5fa' }],
+                output: conc > 1
+                    ? [{ data: xs.map(function (r) { return r.outputSpeed; }), label: '并发中每请求平均', color: '#34d399' },
+                       { data: xs.map(function (r) { return r.totalOutputSpeed; }), label: conc + ' 并发整轮吞吐', color: '#fbbf24' }]
+                    : [{ data: xs.map(function (r) { return r.outputSpeed; }), label: '输出速度', color: '#34d399' }]
+            };
+        }
+
+        function perfDrawCharts(theme, prefillCanvas, outputCanvas) {
+            theme = theme || PERF_THEME_DARK;
+            const c1 = prefillCanvas || perfEl('chart-prefill');
+            const c2 = outputCanvas || perfEl('chart-output');
+            if (!c1 || !c2) return;
+            const d = perfChartLines();
+            const suffix = d.conc > 1 ? '（' + d.conc + ' 并发）' : '';
+            perfDrawLine(c1, d.x, d.prefill, '预填充速度' + suffix, '输入长度', 'token/s', theme);
+            perfDrawLine(c2, d.x, d.output, '输出速度' + suffix, '输入长度', 'token/s', theme);
+        }
+
+        function perfNiceMax(max) {
+            if (!(max > 0)) return 1;
+            const exp = Math.floor(Math.log10(max));
+            const base = Math.pow(10, exp);
+            if (max <= base) return base;
+            if (max <= 2 * base) return 2 * base;
+            if (max <= 5 * base) return 5 * base;
+            return 10 * base;
+        }
+
+        function perfDrawLine(canvas, xData, lines, title, xLabel, yLabel, theme) {
+            const multi = lines.length > 1;
+            const legendH = multi ? 46 : 0;
+            const W = 1000, H = 500 + legendH;
+            canvas.width = W;
+            canvas.height = H;
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = theme.bg;
+            ctx.fillRect(0, 0, W, H);
+
+            const left = 100, right = 100, top = 80, bottom = 50 + legendH;
+            const cw = W - left - right, chH = H - top - bottom;
+            const x0 = left, x1 = left + cw, y0 = top + chH, y1 = top;
+            const font = '"Microsoft YaHei", "PingFang SC", sans-serif';
+
+            ctx.font = 'bold 20px ' + font;
+            ctx.fillStyle = theme.text;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(title, W / 2, 15);
+
+            if (!xData.length) {
+                ctx.font = '15px ' + font;
+                ctx.fillStyle = theme.dim;
+                ctx.textBaseline = 'middle';
+                ctx.fillText('暂无数据', W / 2, H / 2);
+                return;
+            }
+
+            const ticks = [0].concat(xData);
+            const n = ticks.length;
+            const getX = function (i) { return x0 + (cw / Math.max(1, n - 1)) * i; };
+            let yMax = 0;
+            lines.forEach(function (l) {
+                l.data.forEach(function (v) { const num = Number(v); if (num > yMax) yMax = num; });
+            });
+            yMax = perfNiceMax(yMax);
+            const yTickCount = 5;
+            const getYv = function (v) { return y0 - (Number(v) / yMax) * chH; };
+            const getYi = function (i) { return y0 - (chH / (yTickCount - 1)) * i; };
+
+            ctx.strokeStyle = theme.grid;
+            ctx.lineWidth = 1;
+            for (let i = 0; i < n; i++) {
+                ctx.beginPath(); ctx.moveTo(getX(i), y0); ctx.lineTo(getX(i), y1); ctx.stroke();
+            }
+            for (let i = 0; i < yTickCount; i++) {
+                ctx.beginPath(); ctx.moveTo(x0, getYi(i)); ctx.lineTo(x1, getYi(i)); ctx.stroke();
+            }
+
+            ctx.strokeStyle = theme.axis;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); ctx.stroke();
+
+            ctx.font = '15px ' + font;
+            ctx.fillStyle = theme.dim;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            for (let i = 0; i < n; i++) {
+                const x = getX(i);
+                ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + 8); ctx.stroke();
+                ctx.fillText(ticks[i], x, y0 + 12);
+            }
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            for (let i = 0; i < yTickCount; i++) {
+                const y = getYi(i);
+                ctx.beginPath(); ctx.moveTo(x0 - 8, y); ctx.lineTo(x0, y); ctx.stroke();
+                ctx.fillText((yMax / (yTickCount - 1) * i).toFixed(1), x0 - 12, y);
+            }
+
+            ctx.font = 'bold 15px ' + font;
+            ctx.fillStyle = theme.dim;
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(xLabel, x1 + 15, y0);
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(yLabel, x0, y1 - 32);
+
+            lines.forEach(function (line) {
+                ctx.strokeStyle = line.color;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                for (let i = 0; i < xData.length; i++) {
+                    const x = getX(i + 1), y = getYv(line.data[i]);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                for (let i = 0; i < xData.length; i++) {
+                    const x = getX(i + 1), y = getYv(line.data[i]);
+                    ctx.fillStyle = theme.bg;
+                    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = line.color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.stroke();
+                    ctx.fillStyle = line.color;
+                    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+                    if (!multi) {
+                        ctx.font = '14px ' + font;
+                        ctx.fillStyle = theme.text;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(Number(line.data[i]).toFixed(2), x, y - 10);
+                    }
+                }
+            });
+
+            if (multi) {
+                const ly = y0 + 46;
+                const itemW = 220;
+                let lx = x0 + (cw - lines.length * itemW) / 2;
+                ctx.font = '14px ' + font;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                lines.forEach(function (line) {
+                    ctx.fillStyle = line.color;
+                    ctx.fillRect(lx, ly - 6, 20, 12);
+                    ctx.fillStyle = theme.text;
+                    ctx.fillText(line.label, lx + 26, ly);
+                    lx += itemW;
+                });
+            }
+        }
+
+        // ---- Export ----
+        function perfReportLines() {
+            const lines = [];
+            const pairs = [['处理器', 'processor'], ['主板', 'mainboard'], ['内存', 'memory'],
+                ['显卡', 'gpu'], ['系统', 'system'], ['推理引擎', 'engine'], ['引擎模型', 'enginemodel']];
+            pairs.forEach(function (p) {
+                const v = perfVal(p[1]);
+                if (v) lines.push(p[0] + '：' + v);
+            });
+            lines.push('请求入口：' + perfRequestUrl());
+            lines.push('模型：' + perfVal('model'));
+            lines.push('并发数：' + (perfVal('conc') || '1'));
+            if (perfStartTime) lines.push('测试时间：' + perfStartTime.toLocaleString());
+            return lines;
+        }
+
+        function perfExportBase() {
+            const safe = function (s) { return String(s || '').replace(/\s+/g, '_').replace(/[^\w\-.]/g, ''); };
+            const t = perfStartTime || new Date();
+            const pad = function (v) { return String(v).padStart(2, '0'); };
+            const stamp = '' + t.getFullYear() + pad(t.getMonth() + 1) + pad(t.getDate()) + '_' +
+                pad(t.getHours()) + pad(t.getMinutes()) + pad(t.getSeconds());
+            const parts = [perfVal('gpu'), perfResolvedRoute(), perfVal('model')].filter(Boolean).map(safe);
+            parts.push(stamp);
+            return parts.filter(Boolean).join(',');
+        }
+
+        // Downloads go through a Blob URL. A data: URL download can sit in
+        // Chromium's download list as "pending" forever for text/markdown,
+        // which is what made 下载 Markdown 卡住。
+        function perfDownloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+        }
+
+        function perfDownloadText(text, filename, mime, bom) {
+            perfDownloadBlob(new Blob([(bom ? '﻿' : '') + text], { type: mime + ';charset=utf-8' }), filename);
+        }
+
+        function perfHasData() {
+            if (!perfResults.length) { showToast('没有可导出的数据', 'error'); return false; }
+            return true;
+        }
+
+        function perfExportRows(annotate) {
+            return perfResults.map(function (r) {
+                const conc = r.concurrency || 1;
+                const input = (annotate && r.realInputLength && r.realInputLength !== r.inputLength)
+                    ? r.inputLength + ' (' + r.realInputLength + ')' : r.inputLength;
+                if (r.error) return [input, '错误', '错误', '错误', '错误', '错误', '错误', '错误', conc];
+                return [
+                    input, perfFix(r.prefillTime), perfFix(r.prefillSpeed),
+                    conc > 1 ? perfFix(r.totalPrefillSpeed) : '-',
+                    r.outputLength, perfFix(r.outputTime), perfFix(r.outputSpeed),
+                    conc > 1 ? perfFix(r.totalOutputSpeed) : '-', conc
+                ];
+            });
+        }
+
+        const PERF_COLS = ['输入长度', '预填充耗时（ms）', '每请求预填充速度（token/s）', '预填充批次吞吐量（token/s）',
+            '输出长度', '输出耗时（ms）', '每请求输出速度（token/s）', '整轮输出吞吐量（token/s）', '并发数'];
+        // Same columns, wrapped onto two lines so they fit the exported image.
+        const PERF_PNG_COLS = ['输入长度', '预填充耗时\n(ms)', '每请求预填充\n(token/s)', '预填充批次吞吐\n(token/s)',
+            '输出长度', '输出耗时\n(ms)', '每请求输出\n(token/s)', '整轮输出吞吐\n(token/s)', '并发数'];
+        const PERF_TBL_PAD = 20, PERF_TBL_TITLE_H = 40, PERF_TBL_HEAD_H = 46, PERF_TBL_ROW_H = 30, PERF_TBL_FOOT_H = 34;
+
+        function perfTableHeight(rowCount) {
+            return PERF_TBL_PAD * 2 + PERF_TBL_TITLE_H + PERF_TBL_HEAD_H + rowCount * PERF_TBL_ROW_H + PERF_TBL_FOOT_H;
+        }
+
+        // Render the result table into the exported PNG, under the two charts.
+        function perfDrawTable(ctx, top, W, rows) {
+            const font = '"Microsoft YaHei", "PingFang SC", sans-serif';
+            const x0 = PERF_TBL_PAD, tblW = W - PERF_TBL_PAD * 2;
+            const colW = tblW / PERF_PNG_COLS.length;
+
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.font = 'bold 19px ' + font;
+            ctx.fillStyle = '#111827';
+            ctx.fillText('测试数据明细', x0, top + PERF_TBL_PAD + 8);
+
+            const tblTop = top + PERF_TBL_PAD + PERF_TBL_TITLE_H;
+            ctx.fillStyle = '#eef2f7';
+            ctx.fillRect(x0, tblTop, tblW, PERF_TBL_HEAD_H);
+            ctx.font = 'bold 13px ' + font;
+            ctx.fillStyle = '#374151';
+            ctx.textAlign = 'center';
+            PERF_PNG_COLS.forEach(function (label, i) {
+                const lines = label.split('\n');
+                const cx = x0 + colW * i + colW / 2;
+                const startY = tblTop + (PERF_TBL_HEAD_H - lines.length * 17) / 2;
+                lines.forEach(function (t, li) { ctx.fillText(t, cx, startY + li * 17); });
+            });
+
+            let y = tblTop + PERF_TBL_HEAD_H;
+            ctx.font = '13.5px ' + font;
+            rows.forEach(function (row, ri) {
+                if (ri % 2) {
+                    ctx.fillStyle = '#f8fafc';
+                    ctx.fillRect(x0, y, tblW, PERF_TBL_ROW_H);
+                }
+                const isErr = row.indexOf('错误') !== -1;
+                row.forEach(function (cell, ci) {
+                    ctx.fillStyle = (isErr && ci > 0) ? '#dc2626' : (ci === 0 ? '#111827' : '#1f2937');
+                    ctx.fillText(String(cell), x0 + colW * ci + colW / 2, y + 8);
+                });
+                y += PERF_TBL_ROW_H;
+            });
+
+            ctx.strokeStyle = '#d1d5db';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x0 + .5, tblTop + .5, tblW, PERF_TBL_HEAD_H + rows.length * PERF_TBL_ROW_H);
+            for (let i = 1; i < PERF_PNG_COLS.length; i++) {
+                const x = Math.round(x0 + colW * i) + .5;
+                ctx.beginPath(); ctx.moveTo(x, tblTop); ctx.lineTo(x, y); ctx.stroke();
+            }
+            for (let i = 0; i <= rows.length; i++) {
+                const ry = tblTop + PERF_TBL_HEAD_H + i * PERF_TBL_ROW_H + .5;
+                ctx.beginPath(); ctx.moveTo(x0, ry); ctx.lineTo(x0 + tblW, ry); ctx.stroke();
+            }
+
+            ctx.textAlign = 'left';
+            ctx.font = '12px ' + font;
+            ctx.fillStyle = '#6b7280';
+            ctx.fillText('注：输入长度括号内为实际 prompt_tokens；整轮输出吞吐包含排队、预填充和解码时间。', x0, y + 12);
+        }
+
+        function perfExportPng() {
+            if (!perfHasData()) return;
+            // Re-render both charts on a light theme so the exported PNG prints well.
+            const c1 = document.createElement('canvas'), c2 = document.createElement('canvas');
+            perfDrawCharts(PERF_THEME_LIGHT, c1, c2);
+            const info = perfReportLines();
+            const rows = perfExportRows(true);
+            const titleH = 90, lineH = 28, pad = 20;
+            const headH = titleH + pad + info.length * lineH + pad;
+            const tableH = perfTableHeight(rows.length);
+            const W = Math.max(c1.width, c2.width);
+            const H = headH + c1.height + c2.height + tableH;
+            const out = document.createElement('canvas');
+            out.width = W; out.height = H;
+            const ctx = out.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, W, H);
+            ctx.font = 'bold 32px "Microsoft YaHei", "PingFang SC", sans-serif';
+            ctx.fillStyle = '#111827';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('大语言模型推理性能测试结果', W / 2, 26);
+            ctx.font = '15px "Microsoft YaHei", "PingFang SC", sans-serif';
+            ctx.textAlign = 'left';
+            let y = titleH + pad;
+            info.forEach(function (line) { ctx.fillText(line, pad, y); y += lineH; });
+            ctx.drawImage(c1, 0, headH);
+            ctx.drawImage(c2, 0, headH + c1.height);
+            perfDrawTable(ctx, headH + c1.height + c2.height, W, rows);
+            const name = perfExportBase() + '.png';
+            if (out.toBlob) out.toBlob(function (blob) { perfDownloadBlob(blob, name); }, 'image/png');
+            else perfDownloadBlob(new Blob([out.toDataURL('image/png')], { type: 'image/png' }), name);
+        }
+
+        function perfExportCsv() {
+            if (!perfHasData()) return;
+            let csv = '大语言模型推理性能测试结果\n\n' + perfReportLines().join('\n') + '\n\n';
+            csv += PERF_COLS.join(',') + '\n';
+            perfExportRows().forEach(function (row) { csv += row.join(',') + '\n'; });
+            perfDownloadText(csv, perfExportBase() + '.csv', 'text/csv', true);
+        }
+
+        function perfExportMd() {
+            if (!perfHasData()) return;
+            let md = '# 大语言模型推理性能测试结果\n\n';
+            perfReportLines().forEach(function (line) { md += '- ' + line + '\n'; });
+            md += '\n| ' + PERF_COLS.join(' | ') + ' |\n|' + PERF_COLS.map(function () { return '---:'; }).join('|') + '|\n';
+            perfExportRows().forEach(function (row) { md += '| ' + row.join(' | ') + ' |\n'; });
+            perfDownloadText(md, perfExportBase() + '.md', 'text/markdown');
+        }
+
+        flowAnimStart();
     </script>
 </body>
 </html>

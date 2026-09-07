@@ -7,3 +7,6 @@ __pycache__/
 .AppleDouble/
 ._*
 proxy_config_backup.json
+ccusage_day_cache.json
+proxy_config.json
+surfboard_to_clash_config.yaml
