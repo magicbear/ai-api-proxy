@@ -235,6 +235,11 @@ class APIProxyServer:
         def monitor():
             return send_from_directory('.', 'monitor.html')
 
+        # Vendored Chart.js (MIT) so the monitor chart works without internet.
+        @app.route('/chart.umd.js')
+        def chart_umd_js():
+            return send_from_directory('.', 'chart.umd.js')
+
         # Single dynamic dispatcher: matches incoming requests against the live
         # endpoint list from proxy_config.json, so adding/removing/editing
         # endpoints takes effect in real-time without a server restart.
@@ -1703,6 +1708,10 @@ def fetch_ray_status(base_url):
         summary_resp = _ray_fetch_json(base + '/nodes?view=summary')
         summary = summary_resp.get('data', {}).get('summary', []) or []
         for s in summary:
+            # DEAD nodes only carry a raylet entry (raylet.state == "DEAD")
+            # with no hostname/mem/gpus — skip them entirely.
+            if str((s.get('raylet') or {}).get('state') or s.get('state') or '').upper() == 'DEAD':
+                continue
             gpus = []
             for g in (s.get('gpus') or []):
                 gpus.append({
@@ -1722,8 +1731,9 @@ def fetch_ray_status(base_url):
                 'cpu_percent': s.get('cpu'),
                 'cpu_total': cpus[0] if len(cpus) > 0 else None,
                 'cpu_used': cpus[1] if len(cpus) > 1 else None,
+                # Ray reports mem as [total, available, percent_used].
                 'mem_total': mem[0] if len(mem) > 0 else None,
-                'mem_used': mem[1] if len(mem) > 1 else None,
+                'mem_used': (mem[0] - mem[1]) if len(mem) > 1 and mem[0] is not None and mem[1] is not None else None,
                 'mem_percent': mem[2] if len(mem) > 2 else None,
                 'gpus': gpus,
             })

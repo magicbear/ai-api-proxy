@@ -1221,6 +1221,7 @@
     <div class="toast-wrap" id="toast-wrap"></div>
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="/chart.umd.js"></script>
     <script>
         // ============ State ============
         const PREFIX_MAP = [
@@ -2783,7 +2784,7 @@
             const utilAvg = utilN ? utilSum / utilN : 0;
             const vramPct = vramTotal ? vramUsed / vramTotal * 100 : 0;
 
-            let html = '<canvas id="ray-history-chart" height="220" style="width:100%;height:220px;margin:0 10px 6px;"></canvas>';
+            let html = '<div style="position:relative;height:220px;margin:0 10px 6px;"><canvas id="ray-history-chart"></canvas><div id="ray-chart-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#5d6880;font-size:12px;">历史数据采集中…（每 10 秒一个采样点）</div></div>';
             html += '<div class="ray-section-title">集群负载</div><div class="ray-usage">';
             html += '<div class="ray-usage-row"><span class="ray-usage-label">CPU（' + cpuN + ' 节点）</span>' + rayBar(cpuAvg) + '<span class="ray-usage-val">' + cpuAvg.toFixed(1) + '%</span></div>';
             html += '<div class="ray-usage-row"><span class="ray-usage-label">内存（' + fmtGiB(memUsed) + ' / ' + fmtGiB(memTotal) + '）</span>' + rayBar(memPct) + '<span class="ray-usage-val">' + memPct.toFixed(1) + '%</span></div>';
@@ -2794,14 +2795,14 @@
             nodes.forEach(function (n) {
                 html += '<div class="ray-node-card">' +
                     '<div class="ray-node-head"><b>' + escText(n.hostname || '') + (n.ip ? ' <span class="ray-ip">' + escText(n.ip) + '</span>' : '') + '</b></div>' +
-                    '<div class="ray-stat-row"><span>CPU ' + (n.cpu_percent != null ? n.cpu_percent + '%' : '-') + '（' + (n.cpu_used != null ? n.cpu_used + ' / ' + n.cpu_total : '-') + ' 核）</span>' + rayBar(n.cpu_percent) + '</div>' +
-                    '<div class="ray-stat-row"><span>内存 ' + (n.mem_percent != null ? n.mem_percent + '%' : '-') + '（' + (n.mem_used != null ? fmtGiB(n.mem_used) + ' / ' + fmtGiB(n.mem_total) : '-') + '）</span>' + rayBar(n.mem_percent) + '</div>' +
+                    '<div class="ray-stat-row"><span>CPU ' + (n.cpu_percent != null ? Number(n.cpu_percent).toFixed(1) + '%' : '-') + '（' + (n.cpu_used != null ? n.cpu_used + ' / ' + n.cpu_total : '-') + ' 核）</span>' + rayBar(n.cpu_percent) + '</div>' +
+                    '<div class="ray-stat-row"><span>内存 ' + (n.mem_percent != null ? Number(n.mem_percent).toFixed(1) + '%' : '-') + '（' + (n.mem_used != null ? fmtGiB(n.mem_used) + ' / ' + fmtGiB(n.mem_total) : '-') + '）</span>' + rayBar(n.mem_percent) + '</div>' +
                     '<div class="ray-gpus">';
                 (n.gpus || []).forEach(function (g) {
                     const memPct = g.mem_total > 0 ? (g.mem_used / g.mem_total * 100) : 0;
                     html += '<div class="ray-gpu">' +
                         '<div class="ray-gpu-title" title="' + escAttr(g.name || '') + '"><span class="ray-gpu-idx">GPU ' + g.index + '</span>' + escText(g.name || '') + '</div>' +
-                        '<div class="ray-gpu-row"><span class="ray-gpu-label">利用率</span>' + rayBar(g.util) + '<span class="ray-gpu-val">' + (g.util != null ? g.util + '%' : '-') + '</span></div>' +
+                        '<div class="ray-gpu-row"><span class="ray-gpu-label">利用率</span>' + rayBar(g.util) + '<span class="ray-gpu-val">' + (g.util != null ? Number(g.util).toFixed(1) + '%' : '-') + '</span></div>' +
                         '<div class="ray-gpu-row"><span class="ray-gpu-label">显存</span>' + rayBar(g.mem_total > 0 ? (g.mem_used / g.mem_total * 100) : 0) + '<span class="ray-gpu-val">' + (g.mem_used != null ? fmtMib(g.mem_used) + ' / ' + fmtMib(g.mem_total) : '-') + '</span></div>' +
                         '<div class="ray-gpu-stats">' +
                             (g.temp != null ? '<span>温度 ' + g.temp + '°C</span>' : '') +
@@ -2837,85 +2838,80 @@
             });
             return series;
         }
+        let rayHistoryChart = null;
         function drawRayHistoryChart(history) {
             const canvas = document.getElementById('ray-history-chart');
-            if (!canvas) return;
-            const dpr = window.devicePixelRatio || 1;
-            const w = canvas.clientWidth || canvas.parentNode.clientWidth || 800;
-            const h = 220;
-            canvas.width = w * dpr;
-            canvas.height = h * dpr;
-            const ctx = canvas.getContext('2d');
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            ctx.clearRect(0, 0, w, h);
+            if (!canvas || typeof Chart === 'undefined') return;
+            const hint = document.getElementById('ray-chart-hint');
+            if (hint) hint.style.display = history.length ? 'none' : 'flex';
 
-            const padL = 34, padR = 10, padT = 10, padB = 32;
-            const cw = w - padL - padR, ch = h - padT - padB;
+            const fmtTime = ts => {
+                const t = new Date(ts);
+                return ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
+            };
+            const datasets = rayHistorySeries(history).map(s => ({
+                label: s.label,
+                data: history.map(p => ({ x: p.ts * 1000, y: s.get(p) })),
+                borderColor: s.color,
+                backgroundColor: s.color,
+                borderWidth: 1.6,
+                pointRadius: 0,
+                pointHitRadius: 6,
+                tension: 0.25,
+                spanGaps: true
+            }));
 
-            // 网格与刻度
-            ctx.strokeStyle = 'rgba(255,255,255,.08)';
-            ctx.fillStyle = '#5d6880';
-            ctx.font = '10px sans-serif';
-            ctx.textAlign = 'right';
-            for (let p = 0; p <= 100; p += 25) {
-                const y = padT + ch - ch * p / 100;
-                ctx.beginPath();
-                ctx.moveTo(padL, y);
-                ctx.lineTo(w - padR, y);
-                ctx.stroke();
-                ctx.fillText(p + '%', padL - 4, y + 3);
+            if (rayHistoryChart) {
+                // Tab switches rebuild the panel via innerHTML, replacing the
+                // canvas — the old Chart instance would keep painting a
+                // detached node, so recreate when the canvas is no longer ours.
+                if (rayHistoryChart.canvas === canvas) {
+                    rayHistoryChart.data.datasets = datasets;
+                    rayHistoryChart.update('none');
+                    return;
+                }
+                rayHistoryChart.destroy();
+                rayHistoryChart = null;
             }
-
-            if (!history.length) {
-                ctx.textAlign = 'center';
-                ctx.fillStyle = '#5d6880';
-                ctx.fillText('历史数据采集中…（每 10 秒一个采样点）', w / 2, h / 2);
-                return;
-            }
-
-            const n = history.length;
-            const xAt = i => padL + (n === 1 ? cw / 2 : cw * i / (n - 1));
-            const yAt = v => padT + ch - ch * Math.max(0, Math.min(100, v)) / 100;
-
-            // 时间范围标注（首尾）
-            ctx.textAlign = 'left';
-            const t0 = new Date(history[0].ts * 1000);
-            const t1 = new Date(history[n - 1].ts * 1000);
-            const fmt = t => ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
-            ctx.fillStyle = '#5d6880';
-            ctx.fillText(fmt(t0), padL, h - 4);
-            ctx.textAlign = 'right';
-            ctx.fillText(fmt(t1), w - padR, h - 4);
-            ctx.textAlign = 'center';
-            ctx.fillText('最近 ' + Math.round((history[n - 1].ts - history[0].ts) / 60) + ' 分钟', w / 2, h - 4);
-
-            rayHistorySeries(history).forEach(function (s) {
-                ctx.strokeStyle = s.color;
-                ctx.lineWidth = 1.6;
-                ctx.beginPath();
-                let started = false;
-                history.forEach(function (p, i) {
-                    const v = s.get(p);
-                    if (v == null) return;
-                    const x = xAt(i), y = yAt(v);
-                    if (!started) { ctx.moveTo(x, y); started = true; }
-                    else ctx.lineTo(x, y);
-                });
-                ctx.stroke();
-            });
-
-            // 图例（当前值）
-            const last = history[n - 1];
-            ctx.textAlign = 'left';
-            let lx = padL + 4;
-            rayHistorySeries(history).forEach(function (s) {
-                ctx.fillStyle = s.color;
-                ctx.fillRect(lx, h - 24, 8, 8);
-                ctx.fillStyle = '#8b96ad';
-                const v = s.get(last);
-                const text = s.label + ' ' + (v != null ? v + '%' : '-');
-                ctx.fillText(text, lx + 12, h - 16);
-                lx += ctx.measureText(text).width + 34;
+            rayHistoryChart = new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            ticks: {
+                                color: '#5d6880',
+                                maxRotation: 0,
+                                maxTicksLimit: 6,
+                                callback: v => fmtTime(v).slice(0, 5)
+                            },
+                            grid: { color: 'rgba(255,255,255,.08)' }
+                        },
+                        y: {
+                            min: 0,
+                            max: 100,
+                            ticks: { color: '#5d6880', stepSize: 25, callback: v => v + '%' },
+                            grid: { color: 'rgba(255,255,255,.08)' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#8b96ad', boxWidth: 10, boxHeight: 10, usePointStyle: false }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: items => items.length ? fmtTime(items[0].parsed.x) : '',
+                                label: c => c.dataset.label + ' ' + (c.parsed.y != null ? c.parsed.y.toFixed(1) + '%' : '-')
+                            }
+                        }
+                    }
+                }
             });
         }
 
