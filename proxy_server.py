@@ -240,6 +240,11 @@ class APIProxyServer:
         def chart_umd_js():
             return send_from_directory('.', 'chart.umd.js')
 
+        # Value labels for single-series perf charts (MIT).
+        @app.route('/chartjs-plugin-datalabels.min.js')
+        def chartjs_datalabels_js():
+            return send_from_directory('.', 'chartjs-plugin-datalabels.min.js')
+
         # Single dynamic dispatcher: matches incoming requests against the live
         # endpoint list from proxy_config.json, so adding/removing/editing
         # endpoints takes effect in real-time without a server restart.
@@ -360,6 +365,8 @@ class APIProxyServer:
             'model': model_name,  # Add model information to connection info
             'request_size': request_size  # Add request size in bytes
         }
+
+        connection_info.update(client_identity(req))
 
         with active_connections_lock:
             active_connections[request_id] = connection_info
@@ -630,6 +637,10 @@ class APIProxyServer:
             with active_connections_lock:
                 if request_id in active_connections:
                     active_connections[request_id]['final_model'] = final_model
+            try:
+                socketio.emit('connection_updated', {'id': request_id, 'final_model': final_model})
+            except Exception as e:
+                logger.error(f"Failed to emit connection_updated event: {e}")
 
         # Track stream if applicable
         print(f"Handle proxy request -> is_streaming: {is_streaming}")
@@ -647,6 +658,7 @@ class APIProxyServer:
                 'model': stream_original_model,
                 'final_model': stream_final_model
             }
+            stream_info.update(client_identity(req))
             with active_streams_lock:
                 active_streams[request_id] = stream_info
 
@@ -1669,6 +1681,16 @@ def _ray_history_sampler():
             with ray_history_lock:
                 ray_history.append(sample)
                 del ray_history[:-RAY_HISTORY_MAX]
+            # Push the incremental sample to monitor clients so the chart
+            # updates over WebSocket instead of polling.
+            try:
+                socketio.emit('ray_sample', {
+                    'sample': sample,
+                    'nodes': nodes,
+                    'generatedAt': datetime.now().isoformat(),
+                })
+            except Exception as e:
+                logger.error(f"Ray sample broadcast failed: {e}")
         except Exception as e:
             logger.error(f"Ray history sample failed: {e}")
 
@@ -2962,6 +2984,29 @@ def _client_api_key(req):
     if auth.lower().startswith('bearer '):
         return auth[7:].strip()
     return (req.headers.get('X-Api-Key') or '').strip()
+
+
+def client_identity(req):
+    """Best-effort identity of the calling client, for the monitor topology.
+
+    Returns the source IP, a short User-Agent product token ("claude-cli",
+    "python-requests", ...) and the name of the matching model_access_rules
+    entry when the request's key or IP is covered by one. The monitor groups
+    live traffic per client with this instead of per request.
+    """
+    ua = (req.headers.get('User-Agent') or '').strip()
+    agent = ua.split()[0].split('/')[0] if ua else ''
+    ip = req.remote_addr or ''
+    name = ''
+    api_key = _client_api_key(req)
+    for rule in model_access_rules or []:
+        if not isinstance(rule, dict) or not rule.get('name'):
+            continue
+        keys = [k.strip() for k in (rule.get('api_keys') or []) if isinstance(k, str) and k.strip()]
+        if (api_key and api_key in keys) or _ip_in_list(ip, rule.get('ips') or []):
+            name = rule['name']
+            break
+    return {'remote_address': ip, 'user_agent': ua, 'client_agent': agent, 'client_name': name}
 
 
 def _ip_in_list(ip, candidates):

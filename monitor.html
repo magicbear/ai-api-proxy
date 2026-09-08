@@ -234,10 +234,80 @@
             white-space: pre-wrap; word-break: break-word;
         }
 
-        /* ---------- Live flow animation ---------- */
-        .flow-anim-wrap { position: relative; height: 230px; }
-        .flow-anim-wrap canvas { display: block; width: 100%; height: 100%; }
-        @media (max-width: 760px) { .flow-anim-wrap { height: 190px; } }
+        /* ---------- Live traffic topology ---------- */
+        .flowmap {
+            position: relative;
+            display: grid;
+            grid-template-columns: minmax(150px, 1fr) minmax(220px, 1.15fr);
+            gap: 40px;
+            min-height: 240px;
+            padding: 4px 2px 2px;
+        }
+        .flowmap canvas {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 0;
+        }
+        .fm-col {
+            position: relative; z-index: 1;
+            display: flex; flex-direction: column;
+            gap: 10px; justify-content: center;
+        }
+        .fm-col:first-of-type { align-items: flex-start; }
+        .fm-col:last-of-type { align-items: flex-end; }
+        .fm-col:first-of-type > .fm-node, .fm-col:first-of-type > .fm-colhead { width: 100%; max-width: 250px; }
+        .fm-col:last-of-type > .fm-node, .fm-col:last-of-type > .fm-colhead { width: 100%; max-width: 330px; }
+        .fm-colhead {
+            font-size: 10px; letter-spacing: .8px; font-weight: 700;
+            color: var(--text-faint); text-transform: uppercase;
+        }
+        .fm-node {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--panel-2);
+            padding: 8px 10px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, .28);
+            transition: border-color .15s ease, box-shadow .25s ease, opacity .2s ease;
+        }
+        .fm-node.live { border-color: rgba(52, 211, 153, .45); box-shadow: 0 0 14px rgba(52, 211, 153, .16); }
+        .fm-node.dim { opacity: .4; }
+        .fm-title {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 12.5px; font-weight: 700; word-break: break-all;
+        }
+        .fm-title .n { margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--text-faint); flex: none; }
+        .fm-sub { margin-top: 3px; font-size: 10.5px; color: var(--text-dim); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .fm-tps { margin-left: auto; flex: none; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; }
+        .fm-server { cursor: pointer; }
+        .fm-server:hover { border-color: var(--accent); }
+        .fm-server.sel { border-color: var(--accent); background: #29355a; }
+        .fm-models { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
+        .fm-model {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 11px; padding: 3px 7px;
+            border-radius: 6px; cursor: pointer;
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid transparent;
+        }
+        .fm-model:hover { border-color: var(--border); }
+        .fm-model.sel { border-color: var(--accent-2); background: rgba(139, 92, 246, .16); }
+        .fm-model.dim { opacity: .42; }
+        .fm-model .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); flex: none; }
+        .fm-model.live .dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .fm-model .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fm-model .n { margin-left: auto; color: var(--text-faint); flex: none; }
+        .fm-more { font-size: 10.5px; color: var(--text-faint); text-align: center; }
+        .fm-foot {
+            display: flex; align-items: center; gap: 12px;
+            margin-top: 8px; font-size: 11px; color: var(--text-faint);
+        }
+        .fm-foot .evt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fm-foot .tps { margin-left: auto; font-weight: 700; color: var(--amber); flex: none; }
+        .fm-empty { text-align: center; padding: 30px 12px; color: var(--text-faint); font-size: 12.5px; }
+        @media (max-width: 760px) {
+            .flowmap { grid-template-columns: 1fr 1.15fr; gap: 16px; }
+            .fm-title { font-size: 11.5px; }
+        }
 
         /* ---------- Table ---------- */
         .tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -246,6 +316,11 @@
             background: var(--panel-2); color: var(--text-dim);
             font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px;
             border-bottom: 1px solid var(--border);
+        }
+        .perf-tbl-wrap .tbl th .th-unit {
+            display: block; margin-top: 2px;
+            font-size: 10.5px; font-weight: 400; letter-spacing: 0;
+            text-transform: none; color: #7c8aa5;
         }
         .tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border-soft); }
         .tbl tr:last-child td { border-bottom: none; }
@@ -825,7 +900,8 @@
         .perf-summary { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
         .perf-summary b { color: var(--text); font-weight: 600; }
         .perf-charts { display: flex; flex-direction: column; gap: 12px; }
-        .perf-chart { width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 10px; background: #0d121d; }
+        .perf-chart-box { position: relative; height: 520px; min-width: 0; }
+        .perf-chart { width: 100% !important; height: 100% !important; display: block; border: 1px solid var(--border); border-radius: 10px; background: #0d121d; }
         .perf-run { color: var(--amber); animation: ccu-pulse 1.2s ease-in-out infinite; }
         .perf-tbl-wrap { overflow-x: auto; margin-top: 12px; }
         .perf-tbl-wrap .tbl th, .perf-tbl-wrap .tbl td { padding: 8px 10px; white-space: nowrap; }
@@ -919,7 +995,41 @@
                     </div>
                 </div>
             </div>
-            <div class="grid-2">
+            <div class="panel">
+                <div class="panel-header">
+                    <span>实时流量流向</span>
+                    <span class="hint" style="display:flex;align-items:center;gap:8px;">
+                        <span id="fm-sel-hint">全部服务端 · 点击右侧服务端/模型可筛选</span>
+                        <button class="btn" style="padding:3px 9px;font-size:11px;" onclick="fmClearSelection()">显示全部</button>
+                    </span>
+                </div>
+                <div class="panel-body" style="max-height:none;">
+                    <div class="flowmap" id="flowmap">
+                        <canvas id="flowmap-canvas"></canvas>
+                        <div class="fm-col" id="fm-clients"></div>
+                        <div class="fm-col" id="fm-servers"></div>
+                    </div>
+                    <div class="fm-empty" id="fm-empty">暂无实时流量，等待客户端请求…</div>
+                    <div class="fm-foot">
+                        <span id="fm-hub-sub">0 活跃</span>
+                        <span class="evt" id="fm-last-evt">→ 客户端请求 · ← 服务端响应</span>
+                        <span class="tps" id="fm-tps">⚡ 0 tok/s</span>
+                    </div>
+                </div>
+            </div>
+            <div class="panel" style="margin-top:16px;">
+                <div class="panel-header">
+                    <span>流内容预览</span>
+                    <span class="hint" style="display:flex;align-items:center;gap:8px;">
+                        <span id="stream-filter-hint">全部服务端</span>
+                        <button class="btn" style="padding:4px 10px;" onclick="clearStreamData()">清空</button>
+                    </span>
+                </div>
+                <div class="panel-body" style="max-height:none;">
+                    <div id="stream-data" class="stream-data">等待流数据…</div>
+                </div>
+            </div>
+            <div class="grid-2" style="margin-top:16px;">
                 <div class="panel">
                     <div class="panel-header"><span>活动连接</span><span class="hint" id="conn-count-hint">0</span></div>
                     <div class="panel-body tall"><ul id="connections-list" class="list"></ul></div>
@@ -929,24 +1039,6 @@
                     <div class="panel-body">
                         <ul id="streams-list" class="list"></ul>
                     </div>
-                </div>
-            </div>
-            <div class="panel" style="margin-top:16px;">
-                <div class="panel-header">
-                    <span>流内容预览</span>
-                    <button class="btn" style="padding:4px 10px;" onclick="clearStreamData()">清空</button>
-                </div>
-                <div class="panel-body" style="max-height:none;">
-                    <div id="stream-data" class="stream-data">等待流数据…</div>
-                </div>
-            </div>
-            <div class="panel" style="margin-top:16px;">
-                <div class="panel-header">
-                    <span>实时数据流</span>
-                    <span class="hint">→ 客户端请求 · ← 服务端响应</span>
-                </div>
-                <div class="flow-anim-wrap">
-                    <canvas id="flow-anim"></canvas>
                 </div>
             </div>
         </div>
@@ -1134,13 +1226,13 @@
                                     <thead>
                                         <tr>
                                             <th>输入长度</th>
-                                            <th>预填充耗时 (ms)</th>
-                                            <th>每请求预填充速度 (t/s)</th>
-                                            <th>预填充批次吞吐 (t/s)</th>
+                                            <th>预填充耗时<span class="th-unit">ms</span></th>
+                                            <th>预填充速度<span class="th-unit">tok/s · 每请求</span></th>
+                                            <th>批次吞吐<span class="th-unit">tok/s · 预填充</span></th>
                                             <th>输出长度</th>
-                                            <th>输出耗时 (ms)</th>
-                                            <th>每请求输出速度 (t/s)</th>
-                                            <th>整轮输出吞吐 (t/s)</th>
+                                            <th>输出耗时<span class="th-unit">ms</span></th>
+                                            <th>输出速度<span class="th-unit">tok/s · 每请求</span></th>
+                                            <th>整轮吞吐<span class="th-unit">tok/s · 输出</span></th>
                                             <th>并发</th>
                                             <th></th>
                                         </tr>
@@ -1148,15 +1240,15 @@
                                     <tbody id="perf-tbody"></tbody>
                                 </table>
                             </div>
-                            <div class="perf-hint">吞吐口径：预填充批次吞吐统计到全组最后一个首字；整轮输出吞吐按全组总输出 token ÷ 从同时发起到全部完成的墙钟时间计算，包含排队、预填充和解码。</div>
+                            <div class="perf-hint">吞吐口径：预填充批次吞吐统计到全组最后一个首字；整轮输出吞吐按全组总输出 token ÷ 解码窗口（首个首字 → 全部完成）计算，反映并发解码速率。</div>
                         </div>
                     </div>
 
                     <div class="panel">
                         <div class="panel-header"><span>速度曲线</span><span class="hint">深色为页面显示，导出 PNG 使用浅色主题</span></div>
                         <div class="panel-body perf-charts" style="max-height:none;">
-                            <canvas id="perf-chart-prefill" class="perf-chart"></canvas>
-                            <canvas id="perf-chart-output" class="perf-chart"></canvas>
+                            <div class="perf-chart-box"><canvas id="perf-chart-prefill" class="perf-chart"></canvas></div>
+                            <div class="perf-chart-box"><canvas id="perf-chart-output" class="perf-chart"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -1222,6 +1314,7 @@
 
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="/chart.umd.js"></script>
+    <script src="/chartjs-plugin-datalabels.min.js"></script>
     <script>
         // ============ State ============
         const PREFIX_MAP = [
@@ -1409,7 +1502,7 @@
                     ${modelInfo}
                     ${sizeInfo}
                     <span>${connection.timestamp || ''}</span>
-                    <span>来自 ${connection.remoteAddress || 'Unknown'}</span>
+                    <span>来自 ${connection.client_name ? connection.client_name + ' · ' : ''}${connection.remote_address || connection.remoteAddress || 'Unknown'}${connection.client_agent ? ' (' + connection.client_agent + ')' : ''}</span>
                 </div>
                 ${connection.target_url ? '<div class="meta"><span class="target">→ ' + connection.target_url + '</span></div>' : ''}
                 ${connection.start_time ? '<div class="meta"><span>时长 <b class="dur">' + fmtDuration(Date.now() / 1000 - connection.start_time) + '</b></span></div>' : ''}`;
@@ -1422,13 +1515,14 @@
             }
             list.prepend(item);
             trimList(list, 50);
-            flowOnRequest(connection);
+            fmStart(connection, false);
         }
 
         function updateConnection(updateData) {
+            if (updateData.final_model) fmSetModel(updateData.id, updateData.final_model);
             const item = document.getElementById('conn-' + updateData.id);
             if (item && updateData.response_size !== undefined) {
-                flowOnResponse();
+                fmResponse(updateData.id);
                 let el = item.querySelector('.resp');
                 if (!el) {
                     const meta = item.querySelector('.meta');
@@ -1441,6 +1535,7 @@
         }
 
         function removeConnection(id) {
+            fmEnd(id);
             const item = document.getElementById('conn-' + id);
             if (item) {
                 if (item.durTimer) clearInterval(item.durTimer);
@@ -1474,10 +1569,11 @@
             }
             list.prepend(item);
             trimList(list, 8);
-            flowOnStreamStart(stream);
+            fmStart(stream, true);
         }
 
         function updateStreamStatus(id, status) {
+            fmEnd(id);
             const item = document.getElementById('stream-' + id);
             if (item) {
                 if (item.durTimer) clearInterval(item.durTimer);
@@ -1490,10 +1586,11 @@
 
         function clearStreamData() {
             document.getElementById('stream-data').textContent = '';
+            fmap.previewId = null;
         }
 
         function updateStreamData(data) {
-            flowOnChunk();
+            fmChunk(data.id);
             const el = document.getElementById('stream-data');
             let content = '';
 
@@ -1521,224 +1618,580 @@
             }
 
             if (content && content.trim() !== '') {
+                if (!content.startsWith('[usage]')) fmTrackTokens(data.id, content);
+                // The tok/s meter counts everything; the preview only shows the
+                // servers/models picked in the topology above.
+                if (!fmPreviewAllows(data.id)) return;
                 let current = el.textContent;
                 current = current === '等待流数据…' ? '' : current;
+                if (fmap.previewId !== data.id) {
+                    fmap.previewId = data.id;
+                    current += (current ? '\n\n' : '') + fmPreviewHeader(data.id) + '\n';
+                }
                 el.textContent = (current + content).slice(-8000);
-                if (!content.startsWith('[usage]')) flowTrackTokens(content);
+                el.scrollTop = el.scrollHeight;
             }
-            el.scrollTop = el.scrollHeight;
         }
 
-        // ============ Live flow animation ============
-        const flowAnim = {
-            packets: [], reqTs: [], respTs: [], last: '', tokBuf: [],
-            glow: { c: 0, p: 0, b: 0 }, dash: 0,
-            raf: null, lastTs: 0, lastChunk: 0
+        // Which streams may reach the preview pane, given the topology filter.
+        function fmPreviewAllows(id) {
+            if (!fmap.sel.size) return true;
+            const r = fmap.reqs.get(id);
+            return !!r && fmMatch(r.ep, r.model);
+        }
+
+        function fmPreviewHeader(id) {
+            const r = fmap.reqs.get(id);
+            if (!r) return '── 新的流 ──';
+            const c = fmap.clients.get(r.ck);
+            return '── ' + ((c && c.label) || '客户端') + ' → ' + r.ep + ' · ' + r.model + ' ──';
+        }
+
+        // ============ Live traffic topology ============
+        // Clients on the left, this proxy in the middle, upstream servers on
+        // the right with the models they actually served listed underneath.
+        // Every in-flight request becomes a link and particles ride it, so the
+        // direction of the traffic is readable at a glance. Servers that have
+        // not seen traffic recently drop off the map entirely.
+        const FM_TTL = 90000;          // drop idle nodes/links after this long
+        const FM_RATE_WINDOW = 60000;  // the "N/分" counters look back this far
+        const FM_TPS_WINDOW = 2000;      // sliding window behind every tok/s figure
+        const FM_REQ_MAX_AGE = 1800000;  // force-drop requests that never reported an end
+        const FM_MAX_CLIENTS = 8;
+        const FM_MAX_SERVERS = 8;
+        const FM_MAX_MODELS = 6;
+        const FM_REQ_COLOR = '#818cf8';
+        const FM_RESP_COLOR = '#34d399';
+        // Key separator: printable, so it survives HTML attribute round-trips
+        // (a NUL would be rewritten to U+FFFD by the parser).
+        const FM_SEP = '␟';
+
+        const fmap = {
+            clients: new Map(),   // client key -> node
+            servers: new Map(),   // endpoint   -> node (holds a models Map)
+            links: new Map(),     // link key   -> client -> endpoint/model edge
+            reqs: new Map(),      // request id -> which link it rides
+            sel: new Set(),       // 's:<ep>' / 'm:<ep><sep><model>' filters
+            parts: [],            // animated packets
+            pos: {},              // anchor id  -> {l:{x,y}, r:{x,y}}
+            dirty: true, lastRender: 0, lastLayout: 0, lastFoot: 0,
+            dash: 0, raf: null, lastTs: 0,
+            tokBuf: [], lastEvt: '', previewId: null
         };
-        const FLOW_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif';
 
-        function flowSpawn(dir, n, label) {
+        function fmTrim(arr, now) {
+            while (arr.length && now - arr[0] > FM_RATE_WINDOW) arr.shift();
+        }
+
+        // A client is identified by its access-rule name when one matches it,
+        // and by IP + User-Agent product token otherwise.
+        function fmClient(info) {
+            const ip = info.remote_address || info.remoteAddress || '';
+            const agent = info.client_agent || '';
+            const name = info.client_name || '';
+            const key = name || (ip + (agent ? ' · ' + agent : '')) || 'unknown';
+            let c = fmap.clients.get(key);
+            if (!c) {
+                c = { key: key, label: name || ip || '未知客户端', sub: '', active: 0, recent: [], last: 0 };
+                fmap.clients.set(key, c);
+                fmap.dirty = true;
+            }
+            c.sub = [name && ip ? ip : '', agent].filter(Boolean).join(' · ');
+            return c;
+        }
+
+        function fmServer(ep, target) {
+            let s = fmap.servers.get(ep);
+            if (!s) {
+                s = { key: ep, target: '', models: new Map(), active: 0, recent: [], last: 0, tokBuf: [] };
+                fmap.servers.set(ep, s);
+                fmap.dirty = true;
+            }
+            if (target) s.target = target;
+            return s;
+        }
+
+        function fmModel(s, name) {
+            let m = s.models.get(name);
+            if (!m) {
+                m = { name: name, active: 0, recent: [], last: 0 };
+                s.models.set(name, m);
+                fmap.dirty = true;
+            }
+            return m;
+        }
+
+        function fmLink(clientKey, ep, model) {
+            const k = clientKey + FM_SEP + ep + FM_SEP + model;
+            let l = fmap.links.get(k);
+            if (!l) {
+                l = {
+                    key: k, c: clientKey, ep: ep, model: model,
+                    active: 0, recent: [], last: 0,
+                    lastSpawn: 0, lastChunk: 0, lastResp: 0, path: null
+                };
+                fmap.links.set(k, l);
+                fmap.dirty = true;
+            }
+            return l;
+        }
+
+        // Attach a request id to a client -> endpoint/model link, bump counters.
+        function fmBind(id, c, ep, model, target, streaming, countClient) {
+            const now = Date.now();
+            const s = fmServer(ep, target);
+            const m = fmModel(s, model);
+            const l = fmLink(c.key, ep, model);
+            c.active++; s.active++; m.active++; l.active++;
+            c.last = s.last = m.last = l.last = now;
+            if (countClient !== false) { c.recent.push(now); s.recent.push(now); }
+            m.recent.push(now); l.recent.push(now);
+            if (id) fmap.reqs.set(id, { ck: c.key, ep: ep, model: model, lk: l.key, streaming: !!streaming, start: now });
+            fmap.dirty = true;
+            return l;
+        }
+
+        function fmDetach(id) {
+            const r = id ? fmap.reqs.get(id) : null;
+            if (!r) return null;
+            fmap.reqs.delete(id);
+            const c = fmap.clients.get(r.ck);
+            if (c) c.active = Math.max(0, c.active - 1);
+            const s = fmap.servers.get(r.ep);
+            if (s) {
+                s.active = Math.max(0, s.active - 1);
+                const m = s.models.get(r.model);
+                if (m) m.active = Math.max(0, m.active - 1);
+            }
+            const l = fmap.links.get(r.lk);
+            if (l) l.active = Math.max(0, l.active - 1);
+            fmap.dirty = true;
+            return r;
+        }
+
+        // A new request, or the stream half of one that is already tracked.
+        function fmStart(info, streaming) {
+            if (!info) return;
+            const ep = info.endpoint || '未知服务端';
+            const model = info.final_model || info.model || '—';
+            const prev = info.id ? fmap.reqs.get(info.id) : null;
+            if (prev && prev.ep === ep && prev.model === model) {
+                if (streaming) prev.streaming = true;
+                return;  // connection_added + stream_started for the same request
+            }
+            // A stream event for a request we already know keeps the client it
+            // was bound to, even when that event carries no address of its own.
+            const identified = info.client_name || info.remote_address || info.remoteAddress;
+            const known = prev ? fmap.clients.get(prev.ck) : null;
+            if (prev) fmDetach(info.id);
+            const c = (!identified && known) ? known : fmClient(info);
+            const l = fmBind(info.id, c, ep, model, info.target_url, streaming, !prev);
+            fmSpawn(l, 'req', 3);
+            fmap.lastEvt = (streaming ? '流式 ' : '') + c.label + ' → ' + ep + ' · ' + model;
+        }
+
+        // The backend model is resolved after the request was announced, so
+        // move the request onto the model lane it really hit.
+        function fmSetModel(id, model) {
+            const r = id ? fmap.reqs.get(id) : null;
+            if (!r || !model || r.model === model) return;
+            const c = fmap.clients.get(r.ck);
+            if (!c) return;
+            const streaming = r.streaming, ep = r.ep;
+            fmDetach(id);
+            const l = fmBind(id, c, ep, model, null, streaming, false);
+            fmSpawn(l, 'req', 1);
+        }
+
+        function fmEnd(id) { fmDetach(id); }
+
+        function fmResponse(id) {
+            const r = id ? fmap.reqs.get(id) : null;
+            const l = r ? fmap.links.get(r.lk) : null;
+            if (l) { l.last = Date.now(); fmSpawn(l, 'resp', 2); }
+        }
+
+        function fmChunk(id) {
+            const now = Date.now();
+            const r = id ? fmap.reqs.get(id) : null;
+            const l = r ? fmap.links.get(r.lk) : null;
+            if (!l) return;
+            l.last = now;
+            l.lastChunk = now;
+            const c = fmap.clients.get(l.c);
+            if (c) c.last = now;
+            const s = fmap.servers.get(l.ep);
+            if (s) {
+                s.last = now;
+                const m = s.models.get(l.model);
+                if (m) m.last = now;
+            }
+            if (now - l.lastResp > 110) { l.lastResp = now; fmSpawn(l, 'resp', 1); }
+        }
+
+        function fmSpawn(l, dir, n) {
             for (let i = 0; i < n; i++) {
-                flowAnim.packets.push({ dir: dir, t: -i * 0.14, sp: 0.5 + Math.random() * 0.3 });
+                fmap.parts.push({ lk: l.key, dir: dir, t: -i * 0.12, sp: 0.42 + Math.random() * 0.26 });
             }
-            if (flowAnim.packets.length > 160) flowAnim.packets.splice(0, flowAnim.packets.length - 160);
-            const now = Date.now();
-            if (dir === 'req') {
-                flowAnim.reqTs.push(now);
-                if (label) flowAnim.last = label;
-            } else {
-                flowAnim.respTs.push(now);
-            }
-        }
-
-        function flowOnRequest(c) {
-            let label = (c.method || '') + ' ' + (c.url || '');
-            if (c.model) label += ' · ' + c.model;
-            if (c.endpoint) label += ' → ' + c.endpoint;
-            flowSpawn('req', 3, label);
-            flowAnim.glow.c = 1;
-        }
-
-        function flowOnResponse() { flowSpawn('resp', 2, null); }
-
-        function flowOnStreamStart(s) {
-            let label = '流式 ' + (s.url || '');
-            if (s.model) label += ' · ' + s.model;
-            flowSpawn('resp', 3, label);
-            flowAnim.glow.b = 1;
-        }
-
-        function flowOnChunk() {
-            const now = Date.now();
-            if (now - flowAnim.lastChunk < 180) return;
-            flowAnim.lastChunk = now;
-            flowSpawn('resp', 1, null);
+            if (fmap.parts.length > 420) fmap.parts.splice(0, fmap.parts.length - 420);
         }
 
         // Rough token estimate for the live tok/s meter: CJK chars count as
         // ~1 token each, non-CJK text as ~1 token per word. It is a heuristic,
         // not an exact tokenizer count.
         function estimateTokens(text) {
-            const cjk = (text.match(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g) || []).length;
-            const rest = text.replace(/[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g, ' ');
+            const cjk = (text.match(/[一-鿿぀-ヿ가-힯]/g) || []).length;
+            const rest = text.replace(/[一-鿿぀-ヿ가-힯]/g, ' ');
             return cjk + (rest.match(/\S+/g) || []).length;
         }
 
-        function flowTrackTokens(text) {
-            flowAnim.tokBuf.push({ t: Date.now(), n: estimateTokens(text) });
-            if (flowAnim.tokBuf.length > 4000) flowAnim.tokBuf.splice(0, flowAnim.tokBuf.length - 4000);
+        function fmTrackTokens(id, text) {
+            const now = Date.now();
+            const n = estimateTokens(text);
+            fmap.tokBuf.push({ t: now, n: n });
+            if (fmap.tokBuf.length > 4000) fmap.tokBuf.splice(0, fmap.tokBuf.length - 4000);
+            const r = id ? fmap.reqs.get(id) : null;
+            const s = r ? fmap.servers.get(r.ep) : null;
+            if (!s) return;
+            s.tokBuf.push({ t: now, n: n });
+            if (s.tokBuf.length > 2000) s.tokBuf.splice(0, s.tokBuf.length - 2000);
         }
 
-        function flowAnimDraw(cv, dt) {
+        // Tokens per second over a short sliding window. The window is wider
+        // than one second so a per-server rate does not flicker between chunks.
+        function fmRate(buf, now) {
+            while (buf.length && now - buf[0].t > FM_TPS_WINDOW) buf.shift();
+            let sum = 0;
+            for (const e of buf) sum += e.n;
+            return sum / (FM_TPS_WINDOW / 1000);
+        }
+
+        function fmFmtTps(v) {
+            return '⚡ ' + (v >= 10 ? Math.round(v) : v.toFixed(1)) + ' tok/s';
+        }
+
+        // ---- Selection: drives both map dimming and the stream preview ----
+        function fmMatch(ep, model) {
+            if (!fmap.sel.size) return true;
+            return fmap.sel.has('s:' + ep) || fmap.sel.has('m:' + ep + FM_SEP + model);
+        }
+
+        function fmServerPicked(ep) {
+            if (!fmap.sel.size) return true;
+            if (fmap.sel.has('s:' + ep)) return true;
+            for (const k of fmap.sel) if (k.indexOf('m:' + ep + FM_SEP) === 0) return true;
+            return false;
+        }
+
+        function fmToggle(key) {
+            if (fmap.sel.has(key)) {
+                fmap.sel.delete(key);
+            } else {
+                fmap.sel.add(key);
+                // Picking a whole server supersedes its per-model filters.
+                if (key.indexOf('s:') === 0) {
+                    const pre = 'm:' + key.slice(2) + FM_SEP;
+                    Array.from(fmap.sel).forEach(function (k) { if (k.indexOf(pre) === 0) fmap.sel.delete(k); });
+                }
+            }
+            fmSelectionChanged();
+        }
+
+        function fmClearSelection() {
+            fmap.sel.clear();
+            fmSelectionChanged();
+        }
+
+        function fmSelectionLabel() {
+            if (!fmap.sel.size) return '全部服务端';
+            return Array.from(fmap.sel).map(function (k) {
+                return k.indexOf('s:') === 0 ? k.slice(2) : k.slice(2).replace(FM_SEP, ' · ');
+            }).join('，');
+        }
+
+        function fmSelectionChanged() {
+            const label = fmSelectionLabel();
+            const hint = document.getElementById('fm-sel-hint');
+            if (hint) hint.textContent = fmap.sel.size ? ('已选 ' + label) : '全部服务端 · 点击右侧服务端/模型可筛选';
+            const fh = document.getElementById('stream-filter-hint');
+            if (fh) fh.textContent = label;
+            fmap.dirty = true;
+            fmRender();
+        }
+
+        // ---- DOM rendering of the two node columns ----
+        function fmPrune() {
+            const now = Date.now();
+            // Safety net: a request whose end event never arrived (server
+            // restart, dropped socket) must not pin a node as "active" forever.
+            fmap.reqs.forEach(function (r, id) {
+                if (now - r.start > FM_REQ_MAX_AGE) fmDetach(id);
+            });
+            fmap.links.forEach(function (l, k) {
+                fmTrim(l.recent, now);
+                if (!l.active && now - l.last > FM_TTL) fmap.links.delete(k);
+            });
+            fmap.clients.forEach(function (c, k) {
+                fmTrim(c.recent, now);
+                if (!c.active && now - c.last > FM_TTL) fmap.clients.delete(k);
+            });
+            fmap.servers.forEach(function (s, k) {
+                fmTrim(s.recent, now);
+                fmRate(s.tokBuf, now);
+                s.models.forEach(function (m, mk) {
+                    fmTrim(m.recent, now);
+                    if (!m.active && now - m.last > FM_TTL) {
+                        s.models.delete(mk);
+                        fmap.sel.delete('m:' + k + FM_SEP + mk);
+                    }
+                });
+                if (!s.active && now - s.last > FM_TTL) {
+                    fmap.servers.delete(k);
+                    fmap.sel.delete('s:' + k);
+                }
+            });
+        }
+
+        function fmRank(a, b) {
+            return (b.active - a.active) || (b.recent.length - a.recent.length) || (b.last - a.last);
+        }
+
+        function fmCount(o) {
+            return o.active ? (o.active + ' 活跃') : (o.recent.length + '/分');
+        }
+
+        function fmShortTarget(url) {
+            try {
+                return new URL(url).host;
+            } catch (e) {
+                return String(url || '').replace(/^https?:\/\//, '').split('/')[0];
+            }
+        }
+
+        function fmRender() {
+            const clientsEl = document.getElementById('fm-clients');
+            const serversEl = document.getElementById('fm-servers');
+            if (!clientsEl || !serversEl) return;
+            fmPrune();
+
+            const clients = Array.from(fmap.clients.values()).sort(fmRank);
+            const servers = Array.from(fmap.servers.values()).sort(fmRank);
+            const shownC = clients.slice(0, FM_MAX_CLIENTS);
+            const shownS = servers.slice(0, FM_MAX_SERVERS);
+
+            let h = '<div class="fm-colhead">客户端</div>';
+            shownC.forEach(function (c) {
+                h += '<div class="fm-node fm-client' + (c.active ? ' live' : '') + '" data-anchor="c:' + escAttr(c.key) + '">'
+                    + '<div class="fm-title">👤 ' + escText(c.label) + '<span class="n">' + fmCount(c) + '</span></div>'
+                    + (c.sub ? '<div class="fm-sub">' + escText(c.sub) + '</div>' : '')
+                    + '</div>';
+            });
+            if (clients.length > shownC.length) h += '<div class="fm-more">+' + (clients.length - shownC.length) + ' 个客户端</div>';
+            if (!shownC.length) h += '<div class="fm-more">暂无客户端</div>';
+            clientsEl.innerHTML = h;
+
+            h = '<div class="fm-colhead">服务端 · 模型</div>';
+            shownS.forEach(function (s) {
+                const picked = fmap.sel.has('s:' + s.key);
+                const dim = fmap.sel.size && !fmServerPicked(s.key);
+                const models = Array.from(s.models.values()).sort(fmRank).slice(0, FM_MAX_MODELS);
+                const byModel = !picked && fmap.sel.size && fmServerPicked(s.key);
+                h += '<div class="fm-node fm-server' + (s.active ? ' live' : '') + (picked ? ' sel' : '') + (dim ? ' dim' : '') + '"'
+                    + ' data-anchor="s:' + escAttr(s.key) + '" data-ep="' + escAttr(s.key) + '"'
+                    + ' title="点击只看该服务端的流内容">'
+                    + '<div class="fm-title">🖥 ' + escText(s.key) + '<span class="n">' + fmCount(s) + '</span></div>'
+                    + '<div class="fm-sub">' + (s.target ? '<span>' + escText(fmShortTarget(s.target)) + '</span>' : '')
+                    + '<span class="fm-tps" data-ep="' + escAttr(s.key) + '">' + fmFmtTps(fmRate(s.tokBuf, Date.now())) + '</span></div>'
+                    + '<div class="fm-models">'
+                    + models.map(function (m) {
+                        const msel = fmap.sel.has('m:' + s.key + FM_SEP + m.name);
+                        return '<div class="fm-model' + (m.active ? ' live' : '') + (msel ? ' sel' : '')
+                            + (byModel && !msel ? ' dim' : '') + '"'
+                            + ' data-anchor="m:' + escAttr(s.key + FM_SEP + m.name) + '"'
+                            + ' data-ep="' + escAttr(s.key) + '" data-model="' + escAttr(m.name) + '"'
+                            + ' title="' + escAttr(m.name) + '">'
+                            + '<span class="dot"></span><span class="nm">' + escText(m.name) + '</span>'
+                            + '<span class="n">' + fmCount(m) + '</span>'
+                            + '</div>';
+                    }).join('')
+                    + (s.models.size > models.length ? '<div class="fm-more">+' + (s.models.size - models.length) + ' 个模型</div>' : '')
+                    + '</div></div>';
+            });
+            if (servers.length > shownS.length) h += '<div class="fm-more">+' + (servers.length - shownS.length) + ' 个服务端</div>';
+            if (!shownS.length) h += '<div class="fm-more">暂无活动服务端</div>';
+            serversEl.innerHTML = h;
+
+            fmLayout();
+        }
+
+        // ---- Geometry: anchors come straight from the rendered cards ----
+        function fmLayout() {
+            const wrap = document.getElementById('flowmap');
+            if (!wrap || !wrap.offsetParent) return;
+            const wr = wrap.getBoundingClientRect();
+            const pos = {};
+            wrap.querySelectorAll('[data-anchor]').forEach(function (el) {
+                const r = el.getBoundingClientRect();
+                pos[el.dataset.anchor] = {
+                    l: { x: r.left - wr.left, y: r.top - wr.top + r.height / 2 },
+                    r: { x: r.right - wr.left, y: r.top - wr.top + r.height / 2 }
+                };
+            });
+            fmap.pos = pos;
+            fmap.lastLayout = Date.now();
+        }
+
+        function fmBez(p0, p1, p2, p3, t) {
+            const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+            return {
+                x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+                y: a * p0.y + b * p1.y + c * p2.y + d * p3.y
+            };
+        }
+
+        function fmPath(l) {
+            const a = fmap.pos['c:' + l.c];
+            const b = fmap.pos['m:' + l.ep + FM_SEP + l.model] || fmap.pos['s:' + l.ep];
+            if (!a || !b) return null;
+            const A = a.r, B = b.l;
+            const dx = Math.max(40, (B.x - A.x) * 0.5);
+            return { A: A, C1: { x: A.x + dx, y: A.y }, C2: { x: B.x - dx, y: B.y }, B: B };
+        }
+
+        function fmPointAt(p, t) {
+            return fmBez(p.A, p.C1, p.C2, p.B, t);
+        }
+
+        // ---- Canvas: links + flowing packets ----
+        function fmDraw(cv, dt) {
             const dpr = window.devicePixelRatio || 1;
             const w = cv.clientWidth, h = cv.clientHeight;
             if (!w || !h) return;
             if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
                 cv.width = Math.round(w * dpr);
                 cv.height = Math.round(h * dpr);
+                fmLayout();
             }
             const ctx = cv.getContext('2d');
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, w, h);
 
-            const cy = h / 2 - 20;
-            const reqY = cy - 14, respY = cy + 14;
-            const xC = 42, xP = w / 2, xB = w - 42;
+            const now = Date.now();
+            fmap.dash = (fmap.dash + dt * 26) % 16;
 
-            // Lanes: dashes drift in the direction of the traffic they carry.
-            flowAnim.dash = (flowAnim.dash + dt * 24) % 16;
-            function lane(y, offset) {
+            fmap.links.forEach(function (l) {
+                const p = fmPath(l);
+                l.path = p;
+                if (!p) return;
+                const on = fmMatch(l.ep, l.model);
+                const hot = l.active > 0 || now - l.last < 2500;
                 ctx.save();
-                ctx.strokeStyle = 'rgba(139,150,173,.35)';
-                ctx.lineWidth = 1.2;
+                ctx.globalAlpha = on ? (hot ? 0.9 : 0.34) : 0.09;
+                ctx.strokeStyle = hot ? 'rgba(129,140,248,.6)' : 'rgba(139,150,173,.4)';
+                ctx.lineWidth = hot ? 1.5 : 1;
                 ctx.setLineDash([6, 8]);
-                ctx.lineDashOffset = -offset;
+                ctx.lineDashOffset = -fmap.dash;
                 ctx.beginPath();
-                ctx.moveTo(xC, y);
-                ctx.lineTo(xB, y);
+                ctx.moveTo(p.A.x, p.A.y);
+                ctx.bezierCurveTo(p.C1.x, p.C1.y, p.C2.x, p.C2.y, p.B.x, p.B.y);
                 ctx.stroke();
                 ctx.restore();
-            }
-            lane(reqY, flowAnim.dash);
-            lane(respY, -flowAnim.dash);
 
-            // Particles: req left→right on the upper lane, resp right→left below.
-            const keep = [];
-            for (const p of flowAnim.packets) {
-                const pt = p.t;
-                p.t += p.sp * dt;
-                if (p.t <= 1.12) keep.push(p);
-                if (pt < 0.5 && p.t >= 0.5) flowAnim.glow.p = 1;
-                if (pt < 1 && p.t >= 1) {
-                    if (p.dir === 'req') flowAnim.glow.b = 1; else flowAnim.glow.c = 1;
+                // Keep an in-flight link visibly flowing between chunks too.
+                if (l.active > 0 && now - l.lastSpawn > (now - l.lastChunk < 1500 ? 900 : 340)) {
+                    l.lastSpawn = now;
+                    fmSpawn(l, 'req', 1);
                 }
-                const y = p.dir === 'req' ? reqY : respY;
-                const x = p.dir === 'req' ? xC + (xB - xC) * p.t : xB - (xB - xC) * p.t;
-                const col = p.dir === 'req' ? '#818cf8' : '#34d399';
+            });
+
+            const keep = [];
+            for (const pt of fmap.parts) {
+                pt.t += pt.sp * dt;
+                if (pt.t > 1.08) continue;
+                keep.push(pt);
+                if (pt.t < 0) continue;
+                const l = fmap.links.get(pt.lk);
+                if (!l || !l.path) continue;
+                const t = Math.max(0, Math.min(1, pt.dir === 'req' ? pt.t : 1 - pt.t));
+                const q = fmPointAt(l.path, t);
+                const col = pt.dir === 'req' ? FM_REQ_COLOR : FM_RESP_COLOR;
                 ctx.save();
-                ctx.globalAlpha = p.t < 0 ? Math.max(0, 1 + p.t * 4) : (p.t > 0.95 ? Math.max(0, (1.12 - p.t) / 0.17) : 1);
+                ctx.globalAlpha = (fmMatch(l.ep, l.model) ? 1 : 0.14)
+                    * (pt.t > 0.94 ? Math.max(0, (1.08 - pt.t) / 0.14) : 1);
                 ctx.shadowColor = col;
                 ctx.shadowBlur = 9;
                 ctx.fillStyle = col;
                 ctx.beginPath();
-                ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+                ctx.arc(q.x, q.y, 3, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
             }
-            flowAnim.packets = keep;
-
-            for (const k of ['c', 'p', 'b']) flowAnim.glow[k] = Math.max(0, flowAnim.glow[k] - dt * 1.6);
-
-            // Icon nodes (drawn above particles so packets slip underneath).
-            const now = Date.now();
-            while (flowAnim.reqTs.length && now - flowAnim.reqTs[0] > 60000) flowAnim.reqTs.shift();
-            while (flowAnim.respTs.length && now - flowAnim.respTs[0] > 60000) flowAnim.respTs.shift();
-            const streams = (document.getElementById('streams-count') || {}).textContent || '0';
-
-            function node(x, icon, label, sub, glow, color) {
-                const r = 23;
-                ctx.save();
-                ctx.shadowColor = color;
-                ctx.shadowBlur = 18 * glow;
-                ctx.fillStyle = '#1b2338';
-                ctx.beginPath();
-                ctx.arc(x, cy, r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.shadowBlur = 0;
-                ctx.strokeStyle = glow > 0.06 ? color : '#2a3550';
-                ctx.lineWidth = 1.6;
-                ctx.beginPath();
-                ctx.arc(x, cy, r, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.font = '19px "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif';
-                ctx.fillText(icon, x, cy + 1);
-                ctx.textBaseline = 'alphabetic';
-                ctx.fillStyle = '#e6ebf5';
-                ctx.font = '600 12px ' + FLOW_FONT;
-                ctx.fillText(label, x, cy + 42);
-                ctx.fillStyle = '#8b96ad';
-                ctx.font = '10.5px ' + FLOW_FONT;
-                ctx.fillText(sub, x, cy + 58);
-                ctx.restore();
-            }
-
-            // Tiny direction labels on the lanes
-            ctx.fillStyle = '#5d6880';
-            ctx.font = '10.5px ' + FLOW_FONT;
-            ctx.textAlign = 'center';
-            ctx.fillText('请求 →', (xC + xP) / 2, reqY - 8);
-            ctx.fillText('← 响应', (xP + xB) / 2, respY + 16);
-
-            node(xC, '🤖', '客户端', '↑ ' + flowAnim.reqTs.length + ' 请求/分', flowAnim.glow.c, '#818cf8');
-            node(xP, '🔀', 'API Proxy', '活跃流 ' + streams, flowAnim.glow.p, '#8b5cf6');
-            node(xB, '🖥️', '上游后端', '↓ ' + flowAnim.respTs.length + ' 响应/分', flowAnim.glow.b, '#34d399');
-
-            // Live tok/s meter (1s window: output the per-second result directly)
-            while (flowAnim.tokBuf.length && now - flowAnim.tokBuf[0].t > 1000) flowAnim.tokBuf.shift();
-            let tokSum = 0;
-            for (const e of flowAnim.tokBuf) tokSum += e.n;
-            const tps = tokSum;
-            const tokActive = flowAnim.tokBuf.length && (now - flowAnim.tokBuf[flowAnim.tokBuf.length - 1].t < 1500);
-
-            // Latest event ticker (truncated to leave room for the tok/s badge)
-            if (flowAnim.last) {
-                ctx.textAlign = 'left';
-                ctx.fillStyle = '#5d6880';
-                ctx.font = '11px ' + FLOW_FONT;
-                const maxW = w - 150;
-                let txt = flowAnim.last;
-                if (ctx.measureText(txt).width > maxW) {
-                    while (txt.length > 4 && ctx.measureText(txt + '…').width > maxW) txt = txt.slice(0, -1);
-                    txt += '…';
-                }
-                ctx.fillText(txt, 12, h - 10);
-            }
-
-            // tok/s badge (bottom-right)
-            ctx.textAlign = 'right';
-            ctx.font = '700 12px ' + FLOW_FONT;
-            ctx.fillStyle = tps > 0 ? '#fbbf24' : '#5d6880';
-            ctx.globalAlpha = tps > 0 && !tokActive ? 0.55 : 1;
-            ctx.fillText('⚡ ' + (tps >= 10 ? Math.round(tps) : tps.toFixed(1)) + ' tok/s', w - 12, h - 10);
-            ctx.globalAlpha = 1;
+            fmap.parts = keep;
         }
 
-        function flowAnimLoop(ts) {
-            flowAnim.raf = requestAnimationFrame(flowAnimLoop);
-            const cv = document.getElementById('flow-anim');
+        function fmFoot(now) {
+            const total = fmRate(fmap.tokBuf, now);
+            const tps = document.getElementById('fm-tps');
+            if (tps) {
+                tps.textContent = fmFmtTps(total) + ' 合计';
+                tps.style.opacity = total > 0 ? '1' : '.55';
+            }
+            document.querySelectorAll('#fm-servers .fm-tps').forEach(function (el) {
+                const s = fmap.servers.get(el.dataset.ep);
+                const v = s ? fmRate(s.tokBuf, now) : 0;
+                el.textContent = fmFmtTps(v);
+                el.style.opacity = v > 0 ? '1' : '.4';
+            });
+            const evt = document.getElementById('fm-last-evt');
+            if (evt) evt.textContent = fmap.lastEvt || '→ 客户端请求 · ← 服务端响应';
+            const hub = document.getElementById('fm-hub-sub');
+            if (hub) hub.textContent = fmap.reqs.size + ' 活跃请求 · ' + fmap.links.size + ' 链路';
+
+            const has = fmap.clients.size > 0 && fmap.servers.size > 0;
+            const empty = document.getElementById('fm-empty');
+            const wrap = document.getElementById('flowmap');
+            if (empty) empty.style.display = has ? 'none' : 'block';
+            if (wrap && (wrap.style.display === 'none') === has) {
+                wrap.style.display = has ? 'grid' : 'none';
+                if (has) { fmRender(); }
+            }
+        }
+
+        function fmLoop(ts) {
+            fmap.raf = requestAnimationFrame(fmLoop);
+            const cv = document.getElementById('flowmap-canvas');
             if (!cv) return;
             const tab = document.getElementById('monitor-tab');
-            if (!tab || !tab.classList.contains('active')) { flowAnim.lastTs = ts; return; }
-            const dt = Math.min(0.05, flowAnim.lastTs ? (ts - flowAnim.lastTs) / 1000 : 0.016);
-            flowAnim.lastTs = ts;
-            flowAnimDraw(cv, dt);
+            if (!tab || !tab.classList.contains('active')) { fmap.lastTs = ts; return; }
+            const dt = Math.min(0.05, fmap.lastTs ? (ts - fmap.lastTs) / 1000 : 0.016);
+            fmap.lastTs = ts;
+            const now = Date.now();
+            if (now - fmap.lastRender > (fmap.dirty ? 350 : 2000)) {
+                fmap.lastRender = now;
+                fmap.dirty = false;
+                fmRender();
+            } else if (now - fmap.lastLayout > 250) {
+                fmLayout();
+            }
+            fmDraw(cv, dt);
+            if (now - fmap.lastFoot > 400) { fmap.lastFoot = now; fmFoot(now); }
         }
 
-        function flowAnimStart() {
-            if (flowAnim.raf) cancelAnimationFrame(flowAnim.raf);
-            flowAnim.raf = requestAnimationFrame(flowAnimLoop);
+        function fmAnimStart() {
+            const serversEl = document.getElementById('fm-servers');
+            if (serversEl && !serversEl.dataset.bound) {
+                serversEl.dataset.bound = '1';
+                serversEl.addEventListener('click', function (e) {
+                    const m = e.target.closest('.fm-model');
+                    if (m) { fmToggle('m:' + m.dataset.ep + FM_SEP + m.dataset.model); return; }
+                    const s = e.target.closest('.fm-server');
+                    if (s) fmToggle('s:' + s.dataset.ep);
+                });
+            }
+            window.addEventListener('resize', fmLayout);
+            fmSelectionChanged();
+            if (fmap.raf) cancelAnimationFrame(fmap.raf);
+            fmap.raf = requestAnimationFrame(fmLoop);
         }
 
         // ============ Token stats ============
@@ -2728,15 +3181,15 @@
             if (name === 'flow') { refreshModels(); renderFlowChart(); }
             if (name === 'endpoints') { requestEndpointHealth(); }
             if (name === 'errors') { errSeenCount = serverErrors.length; updateErrBadge(); renderErrors(); }
-            if (name === 'ray') { loadRayStatus(); if (!rayTimer) rayTimer = setInterval(loadRayStatus, 10000); }
-            else if (rayTimer) { clearInterval(rayTimer); rayTimer = null; }
+            if (name === 'ray') loadRayStatus();
             if (name === 'config' && !configData) socket.emit('request_config');
             if (name === 'ccusage' && !ccusageData) loadCcusage(false);
             if (name === 'perf') perfOnShow();
         }
 
         // ============ Ray cluster server status ============
-        let rayTimer = null;
+        let rayHistoryLocal = [];
+        const RAY_HISTORY_MAX = 360;
         function loadRayStatus() {
             fetch('/ray_status').then(function (r) {
                 if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2784,7 +3237,16 @@
             const utilAvg = utilN ? utilSum / utilN : 0;
             const vramPct = vramTotal ? vramUsed / vramTotal * 100 : 0;
 
-            let html = '<div style="position:relative;height:220px;margin:0 10px 6px;"><canvas id="ray-history-chart"></canvas><div id="ray-chart-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#5d6880;font-size:12px;">历史数据采集中…（每 10 秒一个采样点）</div></div>';
+            // Keep the chart wrapper across re-renders: recreating the canvas
+            // every poll would rebuild the whole Chart.js instance and lose
+            // legend toggles.
+            const oldWrap = document.getElementById('ray-chart-wrap');
+            let html = '';
+            if (oldWrap) {
+                html += '<div id="ray-chart-slot"></div>';
+            } else {
+                html += '<div id="ray-chart-wrap" style="position:relative;height:220px;margin:0 10px 6px;"><canvas id="ray-history-chart"></canvas><div id="ray-chart-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#5d6880;font-size:12px;">历史数据采集中…（每 10 秒一个采样点）</div></div>';
+            }
             html += '<div class="ray-section-title">集群负载</div><div class="ray-usage">';
             html += '<div class="ray-usage-row"><span class="ray-usage-label">CPU（' + cpuN + ' 节点）</span>' + rayBar(cpuAvg) + '<span class="ray-usage-val">' + cpuAvg.toFixed(1) + '%</span></div>';
             html += '<div class="ray-usage-row"><span class="ray-usage-label">内存（' + fmtGiB(memUsed) + ' / ' + fmtGiB(memTotal) + '）</span>' + rayBar(memPct) + '<span class="ray-usage-val">' + memPct.toFixed(1) + '%</span></div>';
@@ -2814,7 +3276,15 @@
             });
             html += '</div>';
             c.innerHTML = html;
-            drawRayHistoryChart(d.history || []);
+            if (oldWrap) document.getElementById('ray-chart-slot').appendChild(oldWrap);
+            if (d.history) {
+                rayHistoryLocal = d.history;
+                drawRayHistoryChart(rayHistoryLocal, false);
+            } else if (d.sample) {
+                rayHistoryLocal.push(d.sample);
+                if (rayHistoryLocal.length > RAY_HISTORY_MAX) rayHistoryLocal.shift();
+                drawRayHistoryChart(rayHistoryLocal, true);
+            }
         }
 
         // 历史负载折线图（canvas，无外部依赖）
@@ -2839,7 +3309,28 @@
             return series;
         }
         let rayHistoryChart = null;
-        function drawRayHistoryChart(history) {
+        const rayHiddenByLabel = (() => {
+            try { return JSON.parse(localStorage.getItem('rayHiddenByLabel') || '{}'); } catch (e) { return {}; }
+        })();
+        function saveRayHidden() {
+            try { localStorage.setItem('rayHiddenByLabel', JSON.stringify(rayHiddenByLabel)); } catch (e) {}
+        }
+        function makeRayDataset(s, history) {
+            const ds = {
+                label: s.label,
+                data: history.map(p => ({ x: p.ts * 1000, y: s.get(p) })).slice(-RAY_HISTORY_MAX),
+                borderColor: s.color,
+                backgroundColor: s.color,
+                borderWidth: 1.6,
+                pointRadius: 0,
+                pointHitRadius: 6,
+                tension: 0.25,
+                spanGaps: true
+            };
+            if (s.label in rayHiddenByLabel) ds.hidden = rayHiddenByLabel[s.label];
+            return ds;
+        }
+        function drawRayHistoryChart(history, incremental) {
             const canvas = document.getElementById('ray-history-chart');
             if (!canvas || typeof Chart === 'undefined') return;
             const hint = document.getElementById('ray-chart-hint');
@@ -2849,17 +3340,52 @@
                 const t = new Date(ts);
                 return ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
             };
-            const datasets = rayHistorySeries(history).map(s => ({
-                label: s.label,
-                data: history.map(p => ({ x: p.ts * 1000, y: s.get(p) })),
-                borderColor: s.color,
-                backgroundColor: s.color,
-                borderWidth: 1.6,
-                pointRadius: 0,
-                pointHitRadius: 6,
-                tension: 0.25,
-                spanGaps: true
-            }));
+            // Remember legend toggles before touching datasets so the user's
+            // selection survives updates. Legend clicks set meta.hidden at
+            // runtime — isDatasetVisible() is the only reliable read.
+            if (rayHistoryChart) {
+                rayHistoryChart.data.datasets.forEach((ds, i) => {
+                    if (ds.label) rayHiddenByLabel[ds.label] = !rayHistoryChart.isDatasetVisible(i);
+                });
+                // Prune hosts that no longer exist, then persist to
+                // localStorage so the selection survives page reloads.
+                const current = {};
+                rayHistoryChart.data.datasets.forEach(ds => { if (ds.label) current[ds.label] = 1; });
+                Object.keys(rayHiddenByLabel).forEach(k => { if (!(k in current)) delete rayHiddenByLabel[k]; });
+                saveRayHidden();
+            }
+            const series = rayHistorySeries(history);
+
+            // Incremental path: append only the newly arrived samples to the
+            // existing datasets (push/shift) instead of rebuilding everything.
+            if (incremental && rayHistoryChart && rayHistoryChart.canvas === canvas && history.length) {
+                rayHistoryChart.data.datasets.forEach(ds => {
+                    const s = series.find(x => x.label === ds.label);
+                    const lastX = ds.data.length ? ds.data[ds.data.length - 1].x : 0;
+                    const fresh = [];
+                    for (let i = history.length - 1; i >= 0; i--) {
+                        const x = history[i].ts * 1000;
+                        if (x <= lastX) break;
+                        fresh.unshift({ x: x, y: s ? s.get(history[i]) : null });
+                    }
+                    if (fresh.length === 1) {
+                        ds.data.push(fresh[0]);
+                        if (ds.data.length > RAY_HISTORY_MAX) ds.data.shift();
+                    } else if (fresh.length > 1 || (ds.data.length && history.length !== ds.data.length)) {
+                        // Missed samples or drifted window: resync in place —
+                        // the dataset object (and its hidden flag) is kept.
+                        ds.data = makeRayDataset(s, history).data;
+                    }
+                });
+                series.forEach(s => {
+                    if (!rayHistoryChart.data.datasets.find(ds => ds.label === s.label)) {
+                        rayHistoryChart.data.datasets.push(makeRayDataset(s, history));
+                    }
+                });
+                rayHistoryChart.update('none');
+                return;
+            }
+            const datasets = series.map(s => makeRayDataset(s, history));
 
             if (rayHistoryChart) {
                 // Tab switches rebuild the panel via innerHTML, replacing the
@@ -2914,6 +3440,12 @@
                 }
             });
         }
+
+        // Incremental samples pushed by the server over WebSocket.
+        socket.on('ray_sample', function (d) {
+            if (!d || !d.sample) return;
+            renderRayStatus({ generatedAt: d.generatedAt, nodes: d.nodes || [], sample: d.sample });
+        });
 
         // ============ Server error log ============
         function updateErrBadge() {
@@ -3571,12 +4103,12 @@
                         outputTime: avg(function (r) { return r.outputTime; }),
                         outputSpeed: avg(function (r) { return r.outputSpeed; }),
                         // Batch input rate runs until every successful request has
-                        // produced its first token. Actual output throughput uses
-                        // the complete wall-clock batch interval, including queue
-                        // and prefill time, so serial work is no longer multiplied
-                        // by the requested concurrency.
+                        // produced its first token. Output throughput is measured
+                        // over the decode window (first first-token → last
+                        // completion) so it reflects the concurrent decode rate
+                        // instead of being diluted by queued prefill time.
                         totalPrefillSpeed: batchPrefillTime > 0 ? totalIn / (batchPrefillTime / 1000) : 0,
-                        totalOutputSpeed: batchTotalTime > 0 ? totalOut / (batchTotalTime / 1000) : 0,
+                        totalOutputSpeed: decodeWindowTime > 0 ? totalOut / (decodeWindowTime / 1000) : 0,
                         batchPrefillTime: batchPrefillTime,
                         batchTotalTime: batchTotalTime,
                         decodeWindowTime: decodeWindowTime,
@@ -3731,14 +4263,16 @@
         }
 
         function perfDrawCharts(theme, prefillCanvas, outputCanvas) {
+            // Export passes detached canvases: those render at fixed size.
+            const fixed = !!prefillCanvas;
             theme = theme || PERF_THEME_DARK;
             const c1 = prefillCanvas || perfEl('chart-prefill');
             const c2 = outputCanvas || perfEl('chart-output');
             if (!c1 || !c2) return;
             const d = perfChartLines();
             const suffix = d.conc > 1 ? '（' + d.conc + ' 并发）' : '';
-            perfDrawLine(c1, d.x, d.prefill, '预填充速度' + suffix, '输入长度', 'token/s', theme);
-            perfDrawLine(c2, d.x, d.output, '输出速度' + suffix, '输入长度', 'token/s', theme);
+            perfDrawLine(c1, d.x, d.prefill, '预填充速度' + suffix, '输入长度', 'token/s', theme, fixed);
+            perfDrawLine(c2, d.x, d.output, '输出速度' + suffix, '输入长度', 'token/s', theme, fixed);
         }
 
         function perfNiceMax(max) {
@@ -3751,131 +4285,99 @@
             return 10 * base;
         }
 
-        function perfDrawLine(canvas, xData, lines, title, xLabel, yLabel, theme) {
+        function perfDrawLine(canvas, xData, lines, title, xLabel, yLabel, theme, fixed) {
             const multi = lines.length > 1;
             const legendH = multi ? 46 : 0;
             const W = 1000, H = 500 + legendH;
-            canvas.width = W;
-            canvas.height = H;
-            const ctx = canvas.getContext('2d');
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.fillStyle = theme.bg;
-            ctx.fillRect(0, 0, W, H);
-
-            const left = 100, right = 100, top = 80, bottom = 50 + legendH;
-            const cw = W - left - right, chH = H - top - bottom;
-            const x0 = left, x1 = left + cw, y0 = top + chH, y1 = top;
             const font = '"Microsoft YaHei", "PingFang SC", sans-serif';
+            const existing = typeof Chart !== 'undefined' ? Chart.getChart(canvas) : null;
+            if (existing) existing.destroy();
 
-            ctx.font = 'bold 20px ' + font;
-            ctx.fillStyle = theme.text;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(title, W / 2, 15);
+            // fixed=true (PNG export) renders at exactly W×H with dpr 1 so the
+            // report layout stays deterministic; the on-screen path fills its
+            // wrapper and renders at native dpr to stay crisp and in-bounds.
+            let dpr = 1;
+            if (fixed) {
+                canvas.width = W;
+                canvas.height = H;
+            } else {
+                dpr = window.devicePixelRatio || 1;
+                const box = canvas.parentNode;
+                const bw = (box && box.clientWidth) || W;
+                const bh = (box && box.clientHeight) || H;
+                canvas.width = bw * dpr;
+                canvas.height = bh * dpr;
+            }
 
+            const ctx = canvas.getContext('2d');
             if (!xData.length) {
+                ctx.fillStyle = theme.bg;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.font = '15px ' + font;
                 ctx.fillStyle = theme.dim;
+                ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText('暂无数据', W / 2, H / 2);
-                return;
+                ctx.fillText('暂无数据', canvas.width / 2, canvas.height / 2);
+                return null;
             }
 
-            const ticks = [0].concat(xData);
-            const n = ticks.length;
-            const getX = function (i) { return x0 + (cw / Math.max(1, n - 1)) * i; };
-            let yMax = 0;
-            lines.forEach(function (l) {
-                l.data.forEach(function (v) { const num = Number(v); if (num > yMax) yMax = num; });
-            });
-            yMax = perfNiceMax(yMax);
-            const yTickCount = 5;
-            const getYv = function (v) { return y0 - (Number(v) / yMax) * chH; };
-            const getYi = function (i) { return y0 - (chH / (yTickCount - 1)) * i; };
-
-            ctx.strokeStyle = theme.grid;
-            ctx.lineWidth = 1;
-            for (let i = 0; i < n; i++) {
-                ctx.beginPath(); ctx.moveTo(getX(i), y0); ctx.lineTo(getX(i), y1); ctx.stroke();
-            }
-            for (let i = 0; i < yTickCount; i++) {
-                ctx.beginPath(); ctx.moveTo(x0, getYi(i)); ctx.lineTo(x1, getYi(i)); ctx.stroke();
-            }
-
-            ctx.strokeStyle = theme.axis;
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); ctx.stroke();
-
-            ctx.font = '15px ' + font;
-            ctx.fillStyle = theme.dim;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            for (let i = 0; i < n; i++) {
-                const x = getX(i);
-                ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y0 + 8); ctx.stroke();
-                ctx.fillText(ticks[i], x, y0 + 12);
-            }
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            for (let i = 0; i < yTickCount; i++) {
-                const y = getYi(i);
-                ctx.beginPath(); ctx.moveTo(x0 - 8, y); ctx.lineTo(x0, y); ctx.stroke();
-                ctx.fillText((yMax / (yTickCount - 1) * i).toFixed(1), x0 - 12, y);
-            }
-
-            ctx.font = 'bold 15px ' + font;
-            ctx.fillStyle = theme.dim;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(xLabel, x1 + 15, y0);
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(yLabel, x0, y1 - 32);
-
-            lines.forEach(function (line) {
-                ctx.strokeStyle = line.color;
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                for (let i = 0; i < xData.length; i++) {
-                    const x = getX(i + 1), y = getYv(line.data[i]);
-                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                }
-                ctx.stroke();
-                for (let i = 0; i < xData.length; i++) {
-                    const x = getX(i + 1), y = getYv(line.data[i]);
-                    ctx.fillStyle = theme.bg;
-                    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill();
-                    ctx.strokeStyle = line.color;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.stroke();
-                    ctx.fillStyle = line.color;
-                    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
-                    if (!multi) {
-                        ctx.font = '14px ' + font;
-                        ctx.fillStyle = theme.text;
-                        ctx.textAlign = 'center';
-                        ctx.textBaseline = 'bottom';
-                        ctx.fillText(Number(line.data[i]).toFixed(2), x, y - 10);
+            // Single-series charts keep the per-point value labels via the
+            // datalabels plugin, registered per chart (not globally).
+            const plugins = [];
+            if (!multi && typeof ChartDataLabels !== 'undefined') plugins.push(ChartDataLabels);
+            const datasets = lines.map(l => ({
+                label: l.label || yLabel,
+                data: [null].concat(l.data),
+                borderColor: l.color,
+                backgroundColor: l.color,
+                pointBackgroundColor: theme.bg,
+                pointBorderColor: l.color,
+                pointRadius: 3.5,
+                pointHoverRadius: 5,
+                borderWidth: 3,
+                tension: 0.25
+            }));
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [0].concat(xData), datasets: datasets },
+                options: {
+                    responsive: !fixed,
+                    maintainAspectRatio: false,
+                    devicePixelRatio: dpr,
+                    animation: false,
+                    interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                    layout: { padding: { top: 8, left: 16, right: 16 } },
+                    scales: {
+                        x: {
+                            title: { display: true, text: xLabel, color: theme.dim, font: { size: 14, weight: 'bold', family: font } },
+                            ticks: { color: theme.dim },
+                            grid: { color: theme.grid }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: { display: true, text: yLabel, color: theme.dim, font: { size: 14, weight: 'bold', family: font } },
+                            ticks: { color: theme.dim },
+                            grid: { color: theme.grid }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: multi, position: 'bottom', labels: { color: theme.text, boxWidth: 20, boxHeight: 8, font: { size: 14, family: font } } },
+                        tooltip: { callbacks: { label: c => c.dataset.label + ' ' + (c.parsed.y != null ? Number(c.parsed.y).toFixed(2) : '-') } },
+                        datalabels: multi ? { display: false } : {
+                            color: theme.text,
+                            font: { size: 14, family: font },
+                            formatter: v => v == null ? '' : Number(v).toFixed(2),
+                            align: 'top',
+                            offset: 8
+                        }
                     }
-                }
+                },
+                plugins: plugins
             });
-
-            if (multi) {
-                const ly = y0 + 46;
-                const itemW = 220;
-                let lx = x0 + (cw - lines.length * itemW) / 2;
-                ctx.font = '14px ' + font;
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'middle';
-                lines.forEach(function (line) {
-                    ctx.fillStyle = line.color;
-                    ctx.fillRect(lx, ly - 6, 20, 12);
-                    ctx.fillStyle = theme.text;
-                    ctx.fillText(line.label, lx + 26, ly);
-                    lx += itemW;
-                });
-            }
+            // Force a synchronous paint so offscreen canvases are ready for
+            // drawImage in the PNG report export.
+            chart.draw();
+            return chart;
         }
 
         // ---- Export ----
@@ -3946,8 +4448,8 @@
         const PERF_COLS = ['输入长度', '预填充耗时（ms）', '每请求预填充速度（token/s）', '预填充批次吞吐量（token/s）',
             '输出长度', '输出耗时（ms）', '每请求输出速度（token/s）', '整轮输出吞吐量（token/s）', '并发数'];
         // Same columns, wrapped onto two lines so they fit the exported image.
-        const PERF_PNG_COLS = ['输入长度', '预填充耗时\n(ms)', '每请求预填充\n(token/s)', '预填充批次吞吐\n(token/s)',
-            '输出长度', '输出耗时\n(ms)', '每请求输出\n(token/s)', '整轮输出吞吐\n(token/s)', '并发数'];
+        const PERF_PNG_COLS = ['输入长度', '预填充耗时\n(ms)', '预填充速度\n(token/s)', '批次吞吐\n(token/s)',
+            '输出长度', '输出耗时\n(ms)', '输出速度\n(token/s)', '整轮吞吐\n(token/s)', '并发数'];
         const PERF_TBL_PAD = 20, PERF_TBL_TITLE_H = 40, PERF_TBL_HEAD_H = 46, PERF_TBL_ROW_H = 30, PERF_TBL_FOOT_H = 34;
 
         function perfTableHeight(rowCount) {
@@ -4040,6 +4542,12 @@
             info.forEach(function (line) { ctx.fillText(line, pad, y); y += lineH; });
             ctx.drawImage(c1, 0, headH);
             ctx.drawImage(c2, 0, headH + c1.height);
+            if (typeof Chart !== 'undefined') {
+                [c1, c2].forEach(function (cv) {
+                    const inst = Chart.getChart(cv);
+                    if (inst) inst.destroy();
+                });
+            }
             perfDrawTable(ctx, headH + c1.height + c2.height, W, rows);
             const name = perfExportBase() + '.png';
             if (out.toBlob) out.toBlob(function (blob) { perfDownloadBlob(blob, name); }, 'image/png');
@@ -4063,7 +4571,7 @@
             perfDownloadText(md, perfExportBase() + '.md', 'text/markdown');
         }
 
-        flowAnimStart();
+        fmAnimStart();
     </script>
 </body>
 </html>
