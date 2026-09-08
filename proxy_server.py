@@ -1848,6 +1848,18 @@ def resolve_model_route(requested_model_id):
                         final_model_name = redirected_to
                         break
 
+    # Custom routing first, keyed on the exact requested id. Different
+    # casings/prefixes are distinct keys: resolving through the
+    # case-insensitive cache match below would rewrite the id (e.g. to the
+    # camel-case variant served by another endpoint) and hijack the route,
+    # so this check must run before any id remapping.
+    if requested_model_id in custom_model_routing:
+        custom_endpoint_prefix = custom_model_routing[requested_model_id]
+        for endpoint in proxy_server.endpoints if 'proxy_server' in globals() and proxy_server else []:
+            if endpoint['proxy_path_prefix'] == custom_endpoint_prefix:
+                logger.info(f"Using custom routing for {requested_model_id} -> {custom_endpoint_prefix}")
+                return endpoint, final_model_name
+
     # Now determine the backend model name (original_id from cache)
     backend_model_name = final_model_name  # Default to final_model_name if not in cache
     routing_model_id = final_model_name  # Use this for routing lookup

@@ -1240,7 +1240,7 @@
                                     <tbody id="perf-tbody"></tbody>
                                 </table>
                             </div>
-                            <div class="perf-hint">吞吐口径：预填充批次吞吐统计到全组最后一个首字；整轮输出吞吐按全组总输出 token ÷ 解码窗口（首个首字 → 全部完成）计算，反映并发解码速率。</div>
+                            <div class="perf-hint">吞吐口径：批次吞吐 = 全组总输入 token ÷ 最慢的那次预填充；整轮输出吞吐 = 全组总输出 token ÷ 最慢的那次解码，即这组请求并行跑满时的聚合速率（并发 N 时约为每请求速度的 N 倍）。含排队错峰的墙钟口径（解码窗口吞吐 / 端到端吞吐）见详情。</div>
                         </div>
                     </div>
 
@@ -4102,17 +4102,22 @@
                         outputLength: Math.round(avg(function (r) { return r.outputLength; })),
                         outputTime: avg(function (r) { return r.outputTime; }),
                         outputSpeed: avg(function (r) { return r.outputSpeed; }),
-                        // Batch input rate runs until every successful request has
-                        // produced its first token. Output throughput is measured
-                        // over the decode window (first first-token → last
-                        // completion) so it reflects the concurrent decode rate
-                        // instead of being diluted by queued prefill time.
-                        totalPrefillSpeed: batchPrefillTime > 0 ? totalIn / (batchPrefillTime / 1000) : 0,
-                        totalOutputSpeed: decodeWindowTime > 0 ? totalOut / (decodeWindowTime / 1000) : 0,
+                        // Batch throughput = all tokens of the group divided by
+                        // the LONGEST single request, i.e. the aggregate rate the
+                        // group sustained while running together. Measuring it
+                        // over the wall-clock window instead (first first-token →
+                        // last completion) mixes in the stagger between requests,
+                        // which can push the "whole round" figure below the
+                        // per-request speed and makes the two columns
+                        // incomparable. That wall-clock view is still reported
+                        // separately as decodeWindowSpeed / batchTotalSpeed.
+                        totalPrefillSpeed: maxPrefill > 0 ? totalIn / (maxPrefill / 1000) : 0,
+                        totalOutputSpeed: maxOutput > 0 ? totalOut / (maxOutput / 1000) : 0,
                         batchPrefillTime: batchPrefillTime,
                         batchTotalTime: batchTotalTime,
                         decodeWindowTime: decodeWindowTime,
                         decodeWindowSpeed: decodeWindowTime > 0 ? totalOut / (decodeWindowTime / 1000) : 0,
+                        batchTotalSpeed: batchTotalTime > 0 ? totalOut / (batchTotalTime / 1000) : 0,
                         minPrefillTime: Math.min.apply(null, ok.map(function (r) { return r.prefillTime; })),
                         maxPrefillTime: maxPrefill,
                         minOutputTime: Math.min.apply(null, ok.map(function (r) { return r.outputTime; })),
@@ -4204,9 +4209,13 @@
                     kv.push(['批次首字阶段', perfFix(r.batchPrefillTime) + ' ms']);
                     kv.push(['整轮墙钟耗时', perfFix(r.batchTotalTime) + ' ms']);
                     kv.push(['解码活动窗口', perfFix(r.decodeWindowTime) + ' ms']);
-                    kv.push(['预填充批次吞吐', perfFix(r.totalPrefillSpeed) + ' token/s']);
-                    kv.push(['解码窗口吞吐', perfFix(r.decodeWindowSpeed) + ' token/s']);
-                    kv.push(['整轮输出吞吐', perfFix(r.totalOutputSpeed) + ' token/s']);
+                    kv.push(['预填充批次吞吐（总输入 ÷ 最慢预填充）', perfFix(r.totalPrefillSpeed) + ' token/s']);
+                    kv.push(['整轮输出吞吐（总输出 ÷ 最慢解码）', perfFix(r.totalOutputSpeed) + ' token/s']);
+                    kv.push(['解码窗口吞吐（总输出 ÷ 首字→全部完成）', perfFix(r.decodeWindowSpeed) + ' token/s']);
+                    if (r.batchTotalSpeed) kv.push(['端到端吞吐（总输出 ÷ 整轮墙钟）', perfFix(r.batchTotalSpeed) + ' token/s']);
+                    if (r.decodeWindowSpeed && r.outputSpeed && r.decodeWindowSpeed < r.outputSpeed) {
+                        kv.push(['提示', '解码窗口吞吐低于每请求速度，说明这组请求没有真正并行解码（上游在排队/串行处理）']);
+                    }
                 }
             } else {
                 kv.push(['错误', r.errorMessage || '未知错误']);
@@ -4511,7 +4520,7 @@
             ctx.textAlign = 'left';
             ctx.font = '12px ' + font;
             ctx.fillStyle = '#6b7280';
-            ctx.fillText('注：输入长度括号内为实际 prompt_tokens；整轮输出吞吐包含排队、预填充和解码时间。', x0, y + 12);
+            ctx.fillText('注：输入长度括号内为实际 prompt_tokens；整轮输出吞吐 = 全组总输出 token ÷ 最慢的那次解码耗时。', x0, y + 12);
         }
 
         function perfExportPng() {
