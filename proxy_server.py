@@ -1022,6 +1022,7 @@ class APIProxyServer:
 
         # Watch proxy_config.json so external edits hot-reload in real-time
         start_config_watcher()
+        start_model_fetch_retry_worker()
 
         # Sweep zombie connections/streams that were never cleaned up
         start_zombie_sweeper()
@@ -3295,6 +3296,45 @@ def refresh_models_in_background():
             logger.error(f"Background model refresh failed: {e}")
             logger.error(traceback.format_exc())
     Thread(target=_worker, daemon=True, name='model-refresh').start()
+
+
+def start_model_fetch_retry_worker():
+    """Retry model fetches for endpoints that still have no cached models.
+
+    New endpoints added while their backend is still booting fail their
+    initial model fetch (1s timeout x 3); afterwards nothing retries since
+    the config content no longer changes, leaving the endpoint with an
+    empty model list until a manual refresh or restart.
+    """
+    def _worker():
+        while True:
+            time.sleep(30)
+            try:
+                config_local = read_config_file()
+                with cached_models_lock:
+                    models = list(cached_models.values())
+                pending = []
+                for endpoint in config_local.get('endpoints', []):
+                    prefix = endpoint.get('proxy_path_prefix')
+                    if not prefix or not endpoint.get('target_base_url'):
+                        continue
+                    if endpoint.get('static_models') or endpoint.get('models'):
+                        continue  # static lists are applied directly
+                    has_models = any(
+                        m.get('source_endpoint') == prefix
+                        or prefix in (m.get('available_endpoints') or [])
+                        for m in models)
+                    if not has_models:
+                        pending.append(prefix)
+                if not pending:
+                    continue
+                logger.info(f"Retrying model fetch for {len(pending)} endpoint(s) with no models: "
+                            + ', '.join(pending))
+                refresh_models_in_background()
+            except Exception as e:
+                logger.error(f"Model fetch retry worker error: {e}")
+
+    Thread(target=_worker, daemon=True, name='model-fetch-retry').start()
 
 
 def start_config_watcher(interval=1.0):

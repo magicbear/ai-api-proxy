@@ -1240,7 +1240,7 @@
                                     <tbody id="perf-tbody"></tbody>
                                 </table>
                             </div>
-                            <div class="perf-hint">吞吐口径：批次吞吐 = 全组总输入 token ÷ 最慢的那次预填充；整轮输出吞吐 = 全组总输出 token ÷ 最慢的那次解码，即这组请求并行跑满时的聚合速率（并发 N 时约为每请求速度的 N 倍）。含排队错峰的墙钟口径（解码窗口吞吐 / 端到端吞吐）见详情。</div>
+                            <div class="perf-hint">吞吐口径：批次吞吐 = 全组总输入 token ÷ 从发起请求到最后首字的墙钟时间；整轮输出吞吐 = 全组总输出 token ÷ 从最早首字到全部完成的墙钟时间。两者都包含并发请求之间的排队与错峰。</div>
                         </div>
                     </div>
 
@@ -1593,14 +1593,20 @@
             fmChunk(data.id);
             const el = document.getElementById('stream-data');
             let content = '';
+            let reasoning = '';
 
-            if (data.delta && data.delta.content) {
-                content = data.delta.content;
+            // Thinking-mode streams carry the reasoning text in
+            // delta.reasoning_content (DeepSeek official) or delta.reasoning
+            // (vLLM reasoning parser) — it counts toward output tokens too.
+            if (data.delta) {
+                content = data.delta.content || '';
+                reasoning = data.delta.reasoning_content || data.delta.reasoning || '';
             } else if (data.parsed_data && data.parsed_data.choices && data.parsed_data.choices.length > 0) {
                 const choice = data.parsed_data.choices[0];
                 if (choice.delta && choice.delta.content) content = choice.delta.content;
                 else if (choice.message && choice.message.content) content = choice.message.content;
                 else content = '[usage] ' + (JSON.stringify(data.parsed_data.usage || {}).substring(0, 120)) + '...';
+                if (!reasoning && choice.delta) reasoning = choice.delta.reasoning_content || choice.delta.reasoning || '';
             } else if (data.chunk) {
                 content = data.chunk;
                 if (content.startsWith('data: ')) content = content.substring(6);
@@ -1611,14 +1617,18 @@
                         const choice = parsed.choices[0];
                         if (choice.delta && choice.delta.content) content = choice.delta.content;
                         else if (choice.message && choice.message.content) content = choice.message.content;
+                        else if (choice.delta && (choice.delta.reasoning_content || choice.delta.reasoning)) reasoning = choice.delta.reasoning_content || choice.delta.reasoning;
                         else content = '';
                     } else if (parsed.content) { content = parsed.content; }
                     else content = '';
                 } catch (e) { /* keep raw */ }
             }
 
-            if (content && content.trim() !== '') {
-                if (!content.startsWith('[usage]')) fmTrackTokens(data.id, content);
+            // Count reasoning and content together: some providers put both in
+            // the same delta; thinking tokens are real output tokens.
+            const text = (content || '') + (reasoning || '');
+            if (text && text.trim() !== '') {
+                if (!text.startsWith('[usage]')) fmTrackTokens(data.id, text);
                 // The tok/s meter counts everything; the preview only shows the
                 // servers/models picked in the topology above.
                 if (!fmPreviewAllows(data.id)) return;
@@ -1628,7 +1638,7 @@
                     fmap.previewId = data.id;
                     current += (current ? '\n\n' : '') + fmPreviewHeader(data.id) + '\n';
                 }
-                el.textContent = (current + content).slice(-8000);
+                el.textContent = (current + text).slice(-8000);
                 el.scrollTop = el.scrollHeight;
             }
         }
@@ -2655,7 +2665,12 @@
         }
 
         function findModel(id) {
-            return (allModelsData.models || []).find(function (m) { return String(m.id).toLowerCase() === String(id).toLowerCase(); });
+            const models = allModelsData.models || [];
+            // Exact casing first: "deepseek-v4-flash" and "DeepSeek-V4-Flash"
+            // are distinct models on distinct endpoints; a case-insensitive
+            // first match would show the wrong model's route in the flow.
+            return models.find(function (m) { return String(m.id) === String(id); })
+                || models.find(function (m) { return String(m.id).toLowerCase() === String(id).toLowerCase(); });
         }
 
         // Set (lowercased) of all __proxy__ alias model ids. Redirecting an
@@ -3023,12 +3038,20 @@
             return searchSelectNode(found ? 'model' : 'missing', '重定向到目标模型', 'setModelRedirect', alias, options, (isRedirected && currentTarget) ? currentTarget : '');
         }
 
-        // Interactive select for choosing the routing endpoint of a concrete model
-        // Always offers every real endpoint (has target_base_url) so the flow is
-        // complete even if the target model isn't resolvable in the cache.
+        // Interactive select for choosing the routing endpoint of a concrete model.
+        // Only offers endpoints that actually serve the model (avail), plus the
+        // current route in case it is stale. When the model cannot be resolved
+        // (avail empty) every real endpoint is offered so the flow stays editable.
         function routeSelectNode(modelId, route, avail) {
-            void avail;
-            const endpoints = (allModelsData.endpoints || []).filter(function (ep) { return ep.target_base_url && ep.target_base_url.trim() !== ''; });
+            const allEps = (allModelsData.endpoints || []).filter(function (ep) { return ep.target_base_url && ep.target_base_url.trim() !== ''; });
+            const availSet = {};
+            (avail || []).forEach(function (p) { availSet[p] = true; });
+            let endpoints = allEps.filter(function (ep) { return availSet[ep.proxy_path_prefix]; });
+            if (route && !availSet[route]) {
+                const cur = allEps.find(function (ep) { return ep.proxy_path_prefix === route; });
+                if (cur) endpoints.push(cur);
+            }
+            if (!avail || !avail.length) endpoints = allEps;
             const options = [{ v: '', l: '（默认路由）' }];
             endpoints.forEach(function (ep) {
                 options.push({ v: ep.proxy_path_prefix, l: ep.proxy_path_prefix });
@@ -4102,17 +4125,12 @@
                         outputLength: Math.round(avg(function (r) { return r.outputLength; })),
                         outputTime: avg(function (r) { return r.outputTime; }),
                         outputSpeed: avg(function (r) { return r.outputSpeed; }),
-                        // Batch throughput = all tokens of the group divided by
-                        // the LONGEST single request, i.e. the aggregate rate the
-                        // group sustained while running together. Measuring it
-                        // over the wall-clock window instead (first first-token →
-                        // last completion) mixes in the stagger between requests,
-                        // which can push the "whole round" figure below the
-                        // per-request speed and makes the two columns
-                        // incomparable. That wall-clock view is still reported
-                        // separately as decodeWindowSpeed / batchTotalSpeed.
-                        totalPrefillSpeed: maxPrefill > 0 ? totalIn / (maxPrefill / 1000) : 0,
-                        totalOutputSpeed: maxOutput > 0 ? totalOut / (maxOutput / 1000) : 0,
+                        // Use common wall-clock windows for aggregate rates. A
+                        // longest-single-request denominator excludes time while
+                        // that request is queued and can falsely multiply a
+                        // serialized run by the client concurrency.
+                        totalPrefillSpeed: batchPrefillTime > 0 ? totalIn / (batchPrefillTime / 1000) : 0,
+                        totalOutputSpeed: decodeWindowTime > 0 ? totalOut / (decodeWindowTime / 1000) : 0,
                         batchPrefillTime: batchPrefillTime,
                         batchTotalTime: batchTotalTime,
                         decodeWindowTime: decodeWindowTime,
@@ -4209,8 +4227,8 @@
                     kv.push(['批次首字阶段', perfFix(r.batchPrefillTime) + ' ms']);
                     kv.push(['整轮墙钟耗时', perfFix(r.batchTotalTime) + ' ms']);
                     kv.push(['解码活动窗口', perfFix(r.decodeWindowTime) + ' ms']);
-                    kv.push(['预填充批次吞吐（总输入 ÷ 最慢预填充）', perfFix(r.totalPrefillSpeed) + ' token/s']);
-                    kv.push(['整轮输出吞吐（总输出 ÷ 最慢解码）', perfFix(r.totalOutputSpeed) + ' token/s']);
+                    kv.push(['预填充批次吞吐（总输入 ÷ 请求→最后首字）', perfFix(r.totalPrefillSpeed) + ' token/s']);
+                    kv.push(['整轮输出吞吐（总输出 ÷ 最早首字→全部完成）', perfFix(r.totalOutputSpeed) + ' token/s']);
                     kv.push(['解码窗口吞吐（总输出 ÷ 首字→全部完成）', perfFix(r.decodeWindowSpeed) + ' token/s']);
                     if (r.batchTotalSpeed) kv.push(['端到端吞吐（总输出 ÷ 整轮墙钟）', perfFix(r.batchTotalSpeed) + ' token/s']);
                     if (r.decodeWindowSpeed && r.outputSpeed && r.decodeWindowSpeed < r.outputSpeed) {
@@ -4520,7 +4538,7 @@
             ctx.textAlign = 'left';
             ctx.font = '12px ' + font;
             ctx.fillStyle = '#6b7280';
-            ctx.fillText('注：输入长度括号内为实际 prompt_tokens；整轮输出吞吐 = 全组总输出 token ÷ 最慢的那次解码耗时。', x0, y + 12);
+            ctx.fillText('注：输入长度括号内为实际 prompt_tokens；整轮输出吞吐 = 全组总输出 token ÷ 最早首字到全部完成的墙钟时间。', x0, y + 12);
         }
 
         function perfExportPng() {
