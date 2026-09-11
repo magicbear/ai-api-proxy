@@ -8,14 +8,17 @@ import fnmatch
 import ipaddress
 import json
 import os
+import re
 import shutil
 import subprocess
+import traceback
 import uuid
 import requests
 from flask import Flask, request, jsonify, send_from_directory, Response
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 from werkzeug.serving import make_server
 from threading import Thread, Lock
+from concurrent.futures import ThreadPoolExecutor
 import time
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
@@ -127,6 +130,34 @@ server_stats = {
 active_connections = {}
 active_streams = {}
 token_stats = {}  # Track token usage by provider
+
+# ---- Stream preview subscriptions (per monitor socket) ----
+# Full stream_chunk text is only sent to clients that explicitly selected an
+# endpoint/model in the topology map; everyone else gets a tiny aggregated
+# stream_progress (id + token count, flushed every 300ms) so the tok/s meter
+# stays live without streaming every delta over the wire.
+FM_SEP = '␟'  # must match monitor.html, joins endpoint and model in filter keys
+preview_sub_lock = Lock()
+preview_subs = {}    # sid -> set of filter keys ('s:<ep>' | 'm:<ep><sep><model>')
+preview_rooms = {}   # sid -> set of joined room names
+
+_CJK_RE = re.compile(r'[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]')
+
+def estimate_tokens(text):
+    """Mirror of the monitor's heuristic: CJK chars ~1 token, words ~1 token."""
+    if not text:
+        return 0
+    cjk = len(_CJK_RE.findall(text))
+    return cjk + len(_CJK_RE.sub(' ', text).split())
+
+def preview_subscribed_sids(ep, model):
+    """Monitor sids whose filter matches this endpoint/model stream."""
+    with preview_sub_lock:
+        subs = list(preview_subs.items())
+    sf = 's:' + ep
+    mf = 'm:' + ep + FM_SEP + (model or '')
+    return [sid for sid, fl in subs if sf in fl or mf in fl]
+
 cached_models = {}  # Cache models from all providers
 model_routing = {}  # Store routing configuration for models
 custom_model_routing = {}  # Store custom routing overrides set by the UI
@@ -213,7 +244,6 @@ def _handle_unexpected_error(e):
     from werkzeug.exceptions import HTTPException
     if isinstance(e, HTTPException):
         return e
-    import traceback
     log_server_error('handler_exception', str(e), detail=traceback.format_exc(), req=request, status=500)
     return jsonify({"error": "Internal server error", "detail": str(e)}), 500
 
@@ -561,6 +591,7 @@ class APIProxyServer:
         # Special handling for chat completions
         is_chat_completions = '/chat/completions' in req.full_path
         is_streaming = False
+        current_model = None
 
         if is_chat_completions and req.is_json:
             try:
@@ -641,6 +672,32 @@ class APIProxyServer:
                 socketio.emit('connection_updated', {'id': request_id, 'final_model': final_model})
             except Exception as e:
                 logger.error(f"Failed to emit connection_updated event: {e}")
+
+        # Preview filter labels + lightweight progress state for this request.
+        # (The streaming branch below overwrites them with the real values.)
+        stream_original_model = current_model
+        stream_final_model = current_model
+        tok_acc = {'n': 0, 'last_flush': time.time()}
+
+        def flush_stream_progress():
+            if tok_acc['n'] <= 0:
+                return
+            try:
+                socketio.emit('stream_progress', {'id': request_id, 'n': tok_acc['n']})
+            except Exception as e:
+                logger.error(f"Failed to emit stream_progress event: {e}")
+            tok_acc['n'] = 0
+            tok_acc['last_flush'] = time.time()
+
+        def emit_stream_chunk(stream_data):
+            # Full delta text goes only to monitor clients that selected this
+            # endpoint/model in the topology map; everyone else just receives
+            # the aggregated stream_progress counts.
+            for sid in preview_subscribed_sids(endpoint_prefix, stream_final_model or stream_original_model):
+                try:
+                    socketio.emit('stream_chunk', {'data': stream_data}, to=sid)
+                except Exception as e:
+                    logger.error(f"Failed to emit stream_chunk event: {e}")
 
         # Track stream if applicable
         print(f"Handle proxy request -> is_streaming: {is_streaming}")
@@ -732,6 +789,11 @@ class APIProxyServer:
             # Initialize response_size variable to be accessible in on_response_close
             response_size = 0
 
+            # Snapshot the request info NOW: generate() runs after the request
+            # context is gone, so touching the Flask request there raises
+            # "Working outside of request context".
+            req_snapshot = {'method': req.method, 'url': req.full_path, 'remote_address': req.remote_addr}
+
             # Clean up tracking after response is complete
             def on_response_close():
                 # Get the final response size from the container
@@ -744,7 +806,7 @@ class APIProxyServer:
                         log_server_error('upstream_http_error',
                                          f"Upstream HTTP {response.status_code}: {target_url}",
                                          detail=snippet.decode('utf-8', errors='replace'),
-                                         status=response.status_code, req=req,
+                                         status=response.status_code, req=req_snapshot,
                                          endpoint=endpoint_prefix, model=model_name)
                     except Exception as e:
                         logger.error(f"Failed to record upstream HTTP error: {e}")
@@ -891,7 +953,9 @@ class APIProxyServer:
                                 except Exception as e:
                                     logger.error(f"Error processing usage data: {e}")
 
-                            # Emit stream data event for real-time monitoring
+                            # Emit stream data event for real-time monitoring.
+                            # Full delta text goes only to subscribed monitors;
+                            # the tok/s meter rides the aggregated progress event.
                             if is_chat_completions and chunk_str.startswith('data: '):
                                 try:
                                     if chunk_str.startswith('data: ') and chunk_str != 'data: [DONE]\n':
@@ -904,50 +968,50 @@ class APIProxyServer:
                                                     choice = data_obj['choices'][0]
                                                     if 'delta' in choice:
                                                         delta_data = choice['delta']
-                                                        stream_data = {
+                                                        tok_acc['n'] += estimate_tokens(
+                                                            delta_data.get('content')
+                                                            or delta_data.get('reasoning_content')
+                                                            or delta_data.get('reasoning'))
+                                                        if time.time() - tok_acc['last_flush'] >= 0.3:
+                                                            flush_stream_progress()
+                                                        emit_stream_chunk({
                                                             'id': request_id,
                                                             'delta': delta_data,
                                                             'timestamp': datetime.now().isoformat()
-                                                        }
-                                                        socketio.emit('stream_chunk', {'data': stream_data})
+                                                        })
                                                     else:
-                                                        stream_data = {
+                                                        emit_stream_chunk({
                                                             'id': request_id,
                                                             'parsed_data': data_obj,
                                                             'timestamp': datetime.now().isoformat()
-                                                        }
-                                                        socketio.emit('stream_chunk', {'data': stream_data})
+                                                        })
                                                 else:
-                                                    stream_data = {
+                                                    emit_stream_chunk({
                                                         'id': request_id,
                                                         'parsed_data': data_obj,
                                                         'timestamp': datetime.now().isoformat()
-                                                    }
-                                                    socketio.emit('stream_chunk', {'data': stream_data})
+                                                    })
                                             except json.JSONDecodeError:
                                                 # If it's not valid JSON, emit as general chunk
-                                                stream_data = {
+                                                emit_stream_chunk({
                                                     'id': request_id,
                                                     'chunk': chunk_str[:200] + '...' if len(chunk_str) > 200 else chunk_str,
                                                     'timestamp': datetime.now().isoformat()
-                                                }
-                                                socketio.emit('stream_chunk', {'data': stream_data})
+                                                })
                                         else:
                                             # It's [DONE] or empty, emit as special event
-                                            stream_data = {
+                                            emit_stream_chunk({
                                                 'id': request_id,
                                                 'chunk': chunk_str,
                                                 'timestamp': datetime.now().isoformat()
-                                            }
-                                            socketio.emit('stream_chunk', {'data': stream_data})
+                                            })
                                     else:
                                         # Non-data line, emit as general chunk
-                                        stream_data = {
+                                        emit_stream_chunk({
                                             'id': request_id,
                                             'chunk': chunk_str[:200] + '...' if len(chunk_str) > 200 else chunk_str,
                                             'timestamp': datetime.now().isoformat()
-                                        }
-                                        socketio.emit('stream_chunk', {'data': stream_data})
+                                        })
                                 except:
                                     pass  # Silently ignore stream chunk emission failures
 
@@ -957,6 +1021,7 @@ class APIProxyServer:
                     # cleanly rather than let Werkzeug surface a raw 500.
                     logger.info(f"Upstream stream ended during transfer: {e}")
                 finally:
+                    flush_stream_progress()
                     on_response_close()
 
             # Return streaming response
@@ -1273,6 +1338,8 @@ def handle_connect():
         'token_stats': stats_data,
         'models': models_data,
         'redirects': redirects_data,
+        'vision_redirects': dict(model_vision_redirects),
+        'vision_disabled': sorted(model_vision_disabled),
         'server_stats': current_server_stats,
         'errors': errors_data
     })
@@ -2131,10 +2198,36 @@ def aggregated_audio_translations():
     return _aggregated_audio('v1/audio/translations', json_body=False)
 
 
+@socketio.on('stream_preview_subscribe')
+def handle_stream_preview_subscribe(data):
+    """Register which endpoint/model streams this monitor client wants to see.
+
+    Filter keys match the map selection: 's:<endpoint>' or 'm:<endpoint><sep><model>'.
+    An empty list unsubscribes everything (the default on connect).
+    """
+    sid = request.sid
+    wanted = {f for f in (data or {}).get('filters') or [] if isinstance(f, str)}
+    rooms = {'fp:' + f for f in wanted}
+    with preview_sub_lock:
+        preview_subs[sid] = wanted
+        old = preview_rooms.get(sid, set())
+    for room in old - rooms:
+        leave_room(room, sid=sid)
+    for room in rooms - old:
+        join_room(room, sid=sid)
+    preview_rooms[sid] = rooms
+
+
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle WebSocket disconnections."""
     logger.info("Monitor client disconnected")
+    sid = request.sid
+    with preview_sub_lock:
+        preview_subs.pop(sid, None)
+        rooms = preview_rooms.pop(sid, set())
+    for room in rooms:
+        leave_room(room, sid=sid)
 
 
 # Socket.IO event handlers for model routing configuration
@@ -2231,18 +2324,33 @@ def handle_request_endpoint_health():
         emit('config_update_error', {'message': f'Endpoint health check failed: {e}'})
 
 
+def models_updated_payload(models=None, message=None):
+    """Build a 'models_updated' payload.
+
+    Every emitter must go through here: the admin UI treats an absent key as
+    "unchanged", so a payload that omitted vision_redirects/vision_disabled
+    left the flow chart drawing a disabled vision redirect as still enabled
+    (the toggle appeared to refuse being switched off).
+    """
+    payload = {
+        'models': list(models if models is not None else cached_models.values()),
+        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
+        'redirects': model_redirects,
+        'vision_redirects': model_vision_redirects,
+        'vision_disabled': sorted(model_vision_disabled),
+    }
+    if message is not None:
+        payload['message'] = message
+    return payload
+
+
 @socketio.on('request_initial_models')
 def handle_request_initial_models():
     """Send initial models data to the client."""
     from flask_socketio import emit
     # Ensure models are fresh
     current_cached_models = get_cached_models()
-    emit('models_updated', {
-        'models': list(current_cached_models.values()),
-        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,  # NEW: Include redirects in the response
-        'vision_redirects': model_vision_redirects
-    })
+    emit('models_updated', models_updated_payload(current_cached_models.values()))
 
 
 @socketio.on('request_models_refresh')
@@ -2251,13 +2359,7 @@ def handle_request_models_refresh():
     from flask_socketio import emit
     logger.info("Refreshing models from all endpoints...")
     fetch_all_models(refresh=True)  # Force refresh
-    emit('models_updated', {
-        'models': list(cached_models.values()),
-        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,  # NEW: Include redirects in the response
-        'vision_redirects': model_vision_redirects,
-        'message': f'Models refreshed from all endpoints'
-    })
+    emit('models_updated', models_updated_payload(message='Models refreshed from all endpoints'))
 
 
 @socketio.on('change_model_route')
@@ -2291,12 +2393,7 @@ def handle_change_model_route(data):
     save_model_routing_settings()
 
     # Send confirmation back to client
-    socketio.emit('models_updated', {
-        'models': list(cached_models.values()),
-        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,  # NEW: Include redirects in the response
-        'message': f'Routing updated for {model_id}: {endpoint}'
-    })
+    socketio.emit('models_updated', models_updated_payload(message=f'Routing updated for {model_id}: {endpoint}'))
 
 
 @socketio.on('request_provider_models_refresh')
@@ -2309,12 +2406,7 @@ def handle_request_provider_models_refresh(data):
     # Refresh models from the specific provider
     fetch_models_from_provider(provider)
 
-    socketio.emit('models_updated', {
-        'models': list(cached_models.values()),
-        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,  # NEW: Include redirects in the response
-        'message': f'Models refreshed from {provider}'
-    })
+    socketio.emit('models_updated', models_updated_payload(message=f'Models refreshed from {provider}'))
 
 
 @socketio.on('set_model_display')
@@ -2334,12 +2426,7 @@ def handle_set_model_display(data):
     # Save the display settings to the config file
     save_model_display_settings()
 
-    socketio.emit('models_updated', {
-        'models': list(cached_models.values()),
-        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,
-        'message': f'Display setting updated for {model_id}: {is_displayed}'
-    })
+    socketio.emit('models_updated', models_updated_payload(message=f'Display setting updated for {model_id}: {is_displayed}'))
 
 
 @socketio.on('set_models_display_batch')
@@ -2365,12 +2452,7 @@ def handle_set_models_display_batch(data):
     if changed:
         save_model_display_settings()
 
-    socketio.emit('models_updated', {
-        'models': list(cached_models.values()),
-        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,
-        'message': f'Batch display update applied to {changed} models'
-    })
+    socketio.emit('models_updated', models_updated_payload(message=f'Batch display update applied to {changed} models'))
 
 
 # NEW: Socket.IO event handler for setting model redirects from UI
@@ -2388,12 +2470,7 @@ def handle_set_model_redirect(data):
         set_model_redirect(original_model, target_model)
 
         # Send confirmation back to client
-        socketio.emit('models_updated', {
-            'models': list(cached_models.values()),
-            'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-            'redirects': model_redirects,
-            'message': f'Model redirect set: {original_model} -> {target_model}'
-        })
+        socketio.emit('models_updated', models_updated_payload(message=f'Model redirect set: {original_model} -> {target_model}'))
     else:
         emit('error', {'message': 'Both original and target models must be specified'})
 
@@ -2411,13 +2488,447 @@ def handle_save_vision_redirect(data):
 
     set_vision_redirect(original_model, target_model or None)
 
-    socketio.emit('models_updated', {
-        'models': list(cached_models.values()),
-        'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-        'redirects': model_redirects,
-        'vision_redirects': model_vision_redirects,
-        'message': f'Vision redirect set: {original_model}' + (f' -> {target_model}' if target_model else ' (cleared)')
+    socketio.emit('models_updated', models_updated_payload(
+        message=f'Vision redirect set: {original_model}' + (f' -> {target_model}' if target_model else ' (cleared)')))
+
+
+# ---------------------------------------------------------------------------
+# Category benchmark
+#
+# Runs a fixed set of realistic prompts (one per category) against a model and
+# times first-token latency and decode speed for each. It runs *inside* the
+# proxy rather than in the monitor page: a browser adds its own scheduling,
+# SSE parsing and render latency on top of every chunk, which showed up as
+# noise on the first-token figure and dragged the measured decode rate down.
+# ---------------------------------------------------------------------------
+
+BENCH_SUMMARY_PASSAGE = (
+    "In 1854 a cholera outbreak swept through the Soho district of London, killing more than five "
+    "hundred people in ten days. The prevailing theory held that the disease spread through foul "
+    "air rising from the Thames, and the city's authorities planned their response accordingly. "
+    "A physician named John Snow doubted this. He walked the neighbourhood, recorded where each "
+    "victim had lived, and drew the deaths as marks on a street map. The marks clustered tightly "
+    "around a single public water pump on Broad Street, and the few distant cases turned out to "
+    "belong to people who had travelled to that pump because they preferred its taste. Snow "
+    "persuaded the parish to remove the pump handle and the outbreak subsided. His map did not "
+    "prove that contaminated water carried the disease, and the miasma theory survived for another "
+    "decade, but the investigation established a method: plot the cases, look for the pattern, and "
+    "let the pattern point at the cause."
+)
+
+# key, label, prompt, max output tokens. The prompts deliberately cover
+# different output shapes (code, strict JSON, free prose, arithmetic, a
+# deduction chain, a summary of given text, a table) because decode speed and
+# first-token latency differ noticeably between them on most engines.
+BENCH_CATEGORIES = [
+    {
+        'key': 'coding',
+        'label': '代码',
+        'max_tokens': 200,
+        'prompt': ("Write a Python function merge_intervals(intervals) that merges overlapping "
+                   "intervals and returns them sorted. Include a one-line docstring and two example calls."),
+    },
+    {
+        'key': 'json',
+        'label': 'JSON',
+        'max_tokens': 200,
+        'prompt': ("Return only a JSON object describing a fictional bookstore with keys: name "
+                   "(string), city (string), founded (integer year), genres (array of 5 strings), "
+                   "staff (array of 3 objects, each with name and role). No prose."),
+    },
+    {
+        'key': 'narrative',
+        'label': '叙事',
+        'max_tokens': 200,
+        'prompt': ("Write a 120-word short story about a lighthouse keeper who finds a message in "
+                   "a bottle. Use vivid sensory detail."),
+    },
+    {
+        'key': 'prose',
+        'label': '说明文',
+        'max_tokens': 200,
+        'prompt': ("Explain in about 120 words how a refrigerator keeps food cold, for a curious "
+                   "12-year-old."),
+    },
+    {
+        'key': 'math',
+        'label': '数学',
+        'max_tokens': 200,
+        'prompt': ("A train leaves at 9:40. It travels 212 km at 80 km/h, stops for 12 minutes, "
+                   "then travels 95 km at 60 km/h. At what time does it arrive? Show the steps "
+                   "briefly, then give the final time."),
+    },
+    {
+        'key': 'reasoning',
+        'label': '推理',
+        'max_tokens': 200,
+        'prompt': ("Ana, Ben and Cal each own exactly one pet: a cat, a dog, or a fish. Ana does "
+                   "not own the dog. Ben owns neither the cat nor the fish. Who owns which pet? "
+                   "Explain the deduction step by step."),
+    },
+    {
+        'key': 'summary',
+        'label': '摘要',
+        'max_tokens': 150,
+        'prompt': ("Summarize the following passage in exactly three bullet points.\n\n"
+                   + BENCH_SUMMARY_PASSAGE),
+    },
+    {
+        'key': 'format',
+        'label': '格式化',
+        'max_tokens': 200,
+        'prompt': ("Convert this list into a Markdown table with columns Item, Qty, Price, Total "
+                   "(Qty x Price), and add a final row with the grand total: apples 3 @ 0.50; "
+                   "bread 1 @ 2.25; milk 2 @ 1.10; eggs 12 @ 0.25."),
+    },
+]
+
+BENCH_SYSTEM_PROMPT = 'You are a helpful assistant.'
+BENCH_CONNECT_TIMEOUT = 15
+BENCH_READ_TIMEOUT = 300
+
+bench_state = {'running': False, 'cancel': False, 'thread': None}
+bench_lock = Lock()
+
+
+def bench_estimate_tokens(text):
+    """Fallback token estimate when the upstream reports no usage.
+
+    CJK characters count as one token each, everything else as one token per
+    whitespace-separated word. Rough, and only used when the engine gives us
+    nothing better; results say which of the two was used.
+    """
+    if not text:
+        return 0
+    cjk = len(re.findall(r'[一-鿿぀-ヿ가-힯]', text))
+    rest = re.sub(r'[一-鿿぀-ヿ가-힯]', ' ', text)
+    return cjk + len(rest.split())
+
+
+def bench_resolve_target(target_prefix, model):
+    """Resolve (endpoint_config, backend_model, upstream_url) for a benchmark run.
+
+    target_prefix empty means "let the aggregated router decide", which is what
+    the monitor's default 测试入口 does; otherwise the named endpoint is used
+    directly with the model name as typed.
+    """
+    endpoint = None
+    backend_model = model
+    if target_prefix:
+        for ep in (proxy_server.endpoints if 'proxy_server' in globals() else []):
+            if ep.get('proxy_path_prefix') == target_prefix:
+                endpoint = ep
+                break
+        if endpoint is None:
+            raise ValueError(f'Endpoint {target_prefix} not found in config')
+    else:
+        endpoint, backend_model = resolve_model_route(model)
+        if endpoint is None:
+            raise ValueError(f'No configured endpoint serves model {model}')
+
+    base = (endpoint.get('target_base_url') or '').strip()
+    if not base:
+        raise ValueError(f"Endpoint {endpoint.get('proxy_path_prefix')} has no target_base_url")
+    return endpoint, backend_model, urljoin(base.rstrip('/') + '/', 'v1/chat/completions')
+
+
+def bench_one_request(url, headers, payload):
+    """Issue one streaming chat completion and time it.
+
+    Timestamps come from time.perf_counter() on this process, so the only
+    latency between the engine and the clock is the local socket read.
+    """
+    started = time.perf_counter()
+    first = None
+    last = started
+    pieces = []
+    chunk_count = 0
+    prompt_tokens = 0
+    completion_tokens = 0
+    try:
+        with requests.post(url, headers=headers, json=payload, stream=True,
+                           timeout=(BENCH_CONNECT_TIMEOUT, BENCH_READ_TIMEOUT)) as resp:
+            if resp.status_code >= 400:
+                body = (resp.text or '')[:300].replace('\n', ' ')
+                return {'error': True, 'message': f'HTTP {resp.status_code}: {body}'}
+            for raw in resp.iter_lines(decode_unicode=True):
+                now = time.perf_counter()
+                last = now
+                if not raw:
+                    continue
+                line = raw.strip()
+                if not line.startswith('data:'):
+                    continue
+                body = line[5:].strip()
+                if not body or body == '[DONE]':
+                    continue
+                try:
+                    obj = json.loads(body)
+                except json.JSONDecodeError:
+                    continue
+                usage = obj.get('usage') or {}
+                if usage:
+                    prompt_tokens = usage.get('prompt_tokens') or prompt_tokens
+                    completion_tokens = usage.get('completion_tokens') or completion_tokens
+                choices = obj.get('choices') or []
+                if not choices:
+                    continue
+                delta = choices[0].get('delta') or choices[0].get('message') or {}
+                piece = (delta.get('content') or delta.get('reasoning_content')
+                         or delta.get('reasoning') or '')
+                if piece:
+                    pieces.append(piece)
+                    chunk_count += 1
+                    if first is None:
+                        first = now
+    except requests.RequestException as e:
+        return {'error': True, 'message': str(e)[:300]}
+
+    if first is None:
+        return {'error': True, 'message': 'Upstream returned no output content'}
+
+    text = ''.join(pieces)
+    counted = completion_tokens > 0
+    out_tokens = completion_tokens if counted else bench_estimate_tokens(text)
+    decode_s = max(0.0, last - first)
+    ttft_s = max(0.0, first - started)
+    # Prefill rate is prompt tokens over the time to first token. That window
+    # also holds queueing and the network hop, so it is a lower bound on the
+    # engine's own prefill speed, not a pure prefill measurement.
+    prefill_speed = (prompt_tokens / ttft_s) if (ttft_s > 0 and prompt_tokens) else 0.0
+    return {
+        'error': False,
+        'ttft_ms': ttft_s * 1000.0,
+        'decode_ms': decode_s * 1000.0,
+        'total_ms': (last - started) * 1000.0,
+        'output_tokens': out_tokens,
+        'prompt_tokens': prompt_tokens,
+        'usage_reported': counted,
+        'prefill_speed': prefill_speed,
+        'output_speed': (out_tokens / decode_s) if decode_s > 0 else 0.0,
+        'chunks': chunk_count,
+        'started': started,
+        'first': first,
+        'end': last,
+        'text': text,
+    }
+
+
+def bench_run_category(cat, cfg, url, headers):
+    """Run one category for cfg['rounds'] rounds of cfg['concurrency'] requests."""
+    conc = cfg['concurrency']
+    payload = {
+        'model': cfg['backend_model'],
+        'messages': [
+            {'role': 'system', 'content': BENCH_SYSTEM_PROMPT},
+            {'role': 'user', 'content': cat['prompt']},
+        ],
+        'max_tokens': cfg['max_tokens_override'] or cat['max_tokens'],
+        'temperature': 0.1,
+        'top_p': 0.1,
+        'stream': True,
+    }
+    if cfg['include_usage']:
+        payload['stream_options'] = {'include_usage': True}
+    if cfg['extra']:
+        payload.update(cfg['extra'])
+
+    samples = []
+    failures = []
+    round_stats = []
+    for rnd in range(cfg['rounds']):
+        if bench_state['cancel']:
+            break
+        socketio.emit('bench_progress', {
+            'category': cat['key'], 'round': rnd + 1, 'rounds': cfg['rounds'],
+            'message': f"{cat['label']} · 第 {rnd + 1}/{cfg['rounds']} 轮 · 并发 {conc}",
+        })
+        batch_start = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=conc) as pool:
+            results = list(pool.map(lambda _: bench_one_request(url, headers, payload), range(conc)))
+        ok = [r for r in results if not r['error']]
+        failures.extend(r['message'] for r in results if r['error'])
+        samples.extend(ok)
+        if ok:
+            # Aggregate rates need one shared clock: per-request decode spans
+            # overlap, so they can neither be summed nor compared with max().
+            first_first = min(r['first'] for r in ok)
+            last_first = max(r['first'] for r in ok)
+            last_end = max(r['end'] for r in ok)
+            out_total = sum(r['output_tokens'] for r in ok)
+            in_total = sum((r['prompt_tokens'] or 0) for r in ok)
+            decode_window = max(0.0, last_end - first_first)
+            prefill_window = max(0.0, last_first - batch_start)
+            total_window = max(0.0, last_end - batch_start)
+            round_stats.append({
+                'round': rnd + 1,
+                'success': len(ok),
+                'batch_output_speed': (out_total / decode_window) if decode_window > 0 else 0.0,
+                'batch_prefill_speed': (in_total / prefill_window) if prefill_window > 0 else 0.0,
+                'end_to_end_speed': (out_total / total_window) if total_window > 0 else 0.0,
+                'decode_window_ms': decode_window * 1000.0,
+                'total_window_ms': total_window * 1000.0,
+            })
+        if rnd + 1 < cfg['rounds'] and not bench_state['cancel']:
+            time.sleep(cfg['gap_s'])
+
+    def mean(values):
+        values = [v for v in values if v is not None]
+        return (sum(values) / len(values)) if values else 0.0
+
+    row = {
+        'key': cat['key'],
+        'label': cat['label'],
+        'prompt': cat['prompt'],
+        'max_tokens': payload['max_tokens'],
+        'success': len(samples),
+        'errors': len(failures),
+        'error_messages': failures[:5],
+    }
+    if not samples:
+        row['error'] = True
+        row['error_message'] = failures[0] if failures else '未知错误'
+        return row
+
+    ttfts = sorted(s['ttft_ms'] for s in samples)
+    row.update({
+        'error': False,
+        'prompt_tokens': round(mean([s['prompt_tokens'] for s in samples])),
+        'output_tokens': round(mean([s['output_tokens'] for s in samples])),
+        'ttft_ms': mean([s['ttft_ms'] for s in samples]),
+        'ttft_min_ms': ttfts[0],
+        'ttft_max_ms': ttfts[-1],
+        'ttft_p50_ms': ttfts[len(ttfts) // 2],
+        'decode_ms': mean([s['decode_ms'] for s in samples]),
+        'total_ms': mean([s['total_ms'] for s in samples]),
+        'prefill_speed': mean([s['prefill_speed'] for s in samples]),
+        'output_speed': mean([s['output_speed'] for s in samples]),
+        'batch_output_speed': mean([r['batch_output_speed'] for r in round_stats]),
+        'batch_prefill_speed': mean([r['batch_prefill_speed'] for r in round_stats]),
+        'end_to_end_speed': mean([r['end_to_end_speed'] for r in round_stats]),
+        'usage_reported': all(s['usage_reported'] for s in samples),
+        'rounds': round_stats,
+        'sample_output': samples[0]['text'][:4000],
     })
+    return row
+
+
+def bench_worker(cfg):
+    """Background driver: warm up, then run every selected category in order."""
+    try:
+        endpoint, backend_model, url = bench_resolve_target(cfg['target'], cfg['model'])
+        cfg['backend_model'] = backend_model
+        headers = {'Content-Type': 'application/json', 'Accept': 'text/event-stream'}
+        headers.update(resolve_api_key_headers(endpoint))
+        if cfg.get('api_key'):
+            headers['Authorization'] = f"Bearer {cfg['api_key']}"
+
+        cats = [c for c in BENCH_CATEGORIES if c['key'] in cfg['categories']] or list(BENCH_CATEGORIES)
+        socketio.emit('bench_started', {
+            'categories': [c['key'] for c in cats],
+            'model': cfg['model'],
+            'backend_model': backend_model,
+            'endpoint': endpoint.get('proxy_path_prefix'),
+            'url': url,
+            'concurrency': cfg['concurrency'],
+            'rounds': cfg['rounds'],
+            'started_at': datetime.now().isoformat(),
+        })
+
+        if cfg['warmup']:
+            socketio.emit('bench_progress', {'message': '预热连接与模型…'})
+            warm = dict(model=backend_model, max_tokens=8, temperature=0.1, stream=True,
+                        messages=[{'role': 'user', 'content': 'Say OK.'}])
+            bench_one_request(url, headers, warm)
+
+        started = time.perf_counter()
+        rows = []
+        for idx, cat in enumerate(cats):
+            if bench_state['cancel']:
+                break
+            socketio.emit('bench_progress', {
+                'category': cat['key'], 'index': idx + 1, 'total': len(cats),
+                'message': f"{cat['label']}（{idx + 1}/{len(cats)}）",
+            })
+            row = bench_run_category(cat, cfg, url, headers)
+            rows.append(row)
+            socketio.emit('bench_row', {'row': row})
+
+        socketio.emit('bench_done', {
+            'count': len(rows),
+            'cancelled': bench_state['cancel'],
+            'elapsed_ms': (time.perf_counter() - started) * 1000.0,
+        })
+    except Exception as e:
+        logger.error(f"Benchmark failed: {e}")
+        logger.error(traceback.format_exc())
+        socketio.emit('bench_error', {'message': str(e)[:300], 'fatal': True})
+    finally:
+        with bench_lock:
+            bench_state['running'] = False
+            bench_state['cancel'] = False
+            bench_state['thread'] = None
+
+
+@socketio.on('bench_meta')
+def handle_bench_meta():
+    """Publish the category list so the UI never hardcodes the prompts."""
+    socketio.emit('bench_meta', {
+        'categories': [{'key': c['key'], 'label': c['label'], 'max_tokens': c['max_tokens'],
+                        'prompt': c['prompt']} for c in BENCH_CATEGORIES],
+        'running': bench_state['running'],
+    })
+
+
+@socketio.on('bench_start')
+def handle_bench_start(data):
+    """Start a category benchmark inside the proxy."""
+    from flask_socketio import emit
+    data = data or {}
+    with bench_lock:
+        if bench_state['running']:
+            emit('bench_error', {'message': '已有测试在运行中', 'fatal': False})
+            return
+        bench_state['running'] = True
+        bench_state['cancel'] = False
+
+    try:
+        conc = max(1, min(100, int(data.get('concurrency') or 1)))
+        rounds = max(1, min(20, int(data.get('rounds') or 1)))
+        extra = data.get('extra') or {}
+        if not isinstance(extra, dict):
+            extra = {}
+        cfg = {
+            'target': (data.get('target') or '').strip(),
+            'model': (data.get('model') or '').strip(),
+            'api_key': (data.get('api_key') or '').strip(),
+            'categories': list(data.get('categories') or [c['key'] for c in BENCH_CATEGORIES]),
+            'concurrency': conc,
+            'rounds': rounds,
+            'include_usage': bool(data.get('include_usage', True)),
+            'warmup': bool(data.get('warmup', True)),
+            'max_tokens_override': int(data.get('max_tokens') or 0) or None,
+            'extra': extra,
+            'gap_s': 1.0,
+        }
+        if not cfg['model']:
+            raise ValueError('必须指定模型')
+    except Exception as e:
+        with bench_lock:
+            bench_state['running'] = False
+        emit('bench_error', {'message': f'参数错误: {e}', 'fatal': True})
+        return
+
+    t = Thread(target=bench_worker, args=(cfg,), daemon=True, name='bench')
+    bench_state['thread'] = t
+    t.start()
+
+
+@socketio.on('bench_stop')
+def handle_bench_stop():
+    """Ask the running benchmark to stop after the current round."""
+    bench_state['cancel'] = True
+    socketio.emit('bench_progress', {'message': '正在停止…'})
 
 
 @socketio.on('load_vision_redirects')
@@ -2444,12 +2955,7 @@ def handle_save_target_model_config(data):
             cached_models[source_model]['target_model'] = target_model
 
         # Send confirmation back to client
-        socketio.emit('models_updated', {
-            'models': list(cached_models.values()),
-            'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-            'redirects': model_redirects,
-            'message': f'Target model configuration saved: {source_model} -> {target_model}'
-        })
+        socketio.emit('models_updated', models_updated_payload(message=f'Target model configuration saved: {source_model} -> {target_model}'))
     else:
         emit('error', {'message': 'Source model must be specified'})
 
@@ -2478,12 +2984,7 @@ def handle_save_fixed_models_config(data):
         fetch_all_models(refresh=True)
 
         # Send confirmation back to client
-        socketio.emit('models_updated', {
-            'models': list(cached_models.values()),
-            'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-            'redirects': model_redirects,
-            'message': f'Fixed models configuration saved for {endpoint_prefix}: {len(fixed_models)} models'
-        })
+        socketio.emit('models_updated', models_updated_payload(message=f'Fixed models configuration saved for {endpoint_prefix}: {len(fixed_models)} models'))
     else:
         emit('error', {'message': 'Endpoint prefix must be specified'})
 
@@ -2501,12 +3002,7 @@ def handle_save_target_model_for_endpoint(data):
         save_target_model_for_endpoint(endpoint_prefix, target_model)
 
         # Send confirmation back to client
-        socketio.emit('models_updated', {
-            'models': list(cached_models.values()),
-            'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-            'redirects': model_redirects,
-            'message': f'Target model for endpoint {endpoint_prefix} set to: {target_model}'
-        })
+        socketio.emit('models_updated', models_updated_payload(message=f'Target model for endpoint {endpoint_prefix} set to: {target_model}'))
     else:
         emit('error', {'message': 'Both endpoint prefix and target model must be specified'})
 
@@ -3285,12 +3781,7 @@ def refresh_models_in_background():
     def _worker():
         try:
             fetch_all_models(refresh=True)
-            socketio.emit('models_updated', {
-                'models': list(cached_models.values()),
-                'endpoints': proxy_server.endpoints if 'proxy_server' in globals() else [],
-                'redirects': model_redirects,
-                'message': 'Config sync: models refreshed'
-            })
+            socketio.emit('models_updated', models_updated_payload(message='Config sync: models refreshed'))
         except Exception as e:
             import traceback
             logger.error(f"Background model refresh failed: {e}")

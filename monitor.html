@@ -128,6 +128,17 @@
             background: linear-gradient(135deg, var(--accent), var(--accent-2));
             box-shadow: 0 4px 12px rgba(99, 102, 241, .35);
         }
+        /* Desktop: full labels only, icons are a mobile affordance. */
+        .tab-ic { display: none; }
+        @media (max-width: 760px) {
+            /* Phones: icons only; the active tab also shows its label.
+               No shrinking: an overflowing row scrolls horizontally instead
+               of squashing buttons into each other. */
+            .tab-ic { display: inline; font-size: 15px; line-height: 1; }
+            .tab-btn .tab-lbl { display: none; }
+            .tab-btn.active .tab-lbl { display: inline; margin-left: 6px; font-size: 13px; }
+            .tab-btn { flex: 0 0 auto; padding: 9px 12px; }
+        }
 
         /* ---------- Stats ---------- */
         .stats {
@@ -279,6 +290,15 @@
         .fm-sub { margin-top: 3px; font-size: 10.5px; color: var(--text-dim); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
         .fm-tps { margin-left: auto; flex: none; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; }
         .fm-server { cursor: pointer; }
+        .fm-probe {
+            margin-left: 8px; flex: none; font-size: 10.5px; line-height: 1.6;
+            padding: 0 7px; border: 1px solid var(--border); border-radius: 9px;
+            cursor: pointer; color: var(--text-dim); background: rgba(255,255,255,.04);
+        }
+        .fm-probe:hover { color: #fff; border-color: var(--accent); }
+        .fm-probe-r { margin-left: 6px; flex: none; font-size: 10.5px; font-weight: 600; }
+        .fm-probe-r.ok { color: #34d399; }
+        .fm-probe-r.err { color: #f87171; cursor: help; }
         .fm-server:hover { border-color: var(--accent); }
         .fm-server.sel { border-color: var(--accent); background: #29355a; }
         .fm-models { margin-top: 7px; display: flex; flex-direction: column; gap: 4px; }
@@ -895,6 +915,16 @@
         .perf-select { cursor: pointer; }
         .perf-area { width: 100%; font-family: "SF Mono", Consolas, monospace; font-size: 11.5px; resize: vertical; }
         .perf-hint { font-size: 11px; color: var(--text-faint); line-height: 1.7; margin-top: 6px; }
+        .perf-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+        .perf-cat {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 12px; color: var(--text-dim); cursor: pointer;
+            padding: 4px 7px; border: 1px solid var(--border-soft); border-radius: 7px;
+            background: rgba(255, 255, 255, .02);
+        }
+        .perf-cat:hover { border-color: var(--accent); color: var(--text); }
+        .perf-cat input { accent-color: var(--accent); }
+        .perf-cat .mt { margin-left: auto; font-size: 10.5px; color: var(--text-faint); }
         .perf-hint b { color: var(--text-dim); font-weight: 600; }
         .perf-url { font-family: "SF Mono", Consolas, monospace; color: var(--amber); word-break: break-all; }
         .perf-summary { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
@@ -953,15 +983,15 @@
         </header>
 
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('monitor', this)">实时监控</button>
-            <button class="tab-btn" onclick="switchTab('statistics', this)">Token 统计</button>
-            <button class="tab-btn" onclick="switchTab('ccusage', this)">CC 用量</button>
-            <button class="tab-btn" onclick="switchTab('flow', this)">模型流向图</button>
-            <button class="tab-btn" onclick="switchTab('endpoints', this)">端点模型</button>
-            <button class="tab-btn" onclick="switchTab('perf', this)">性能测试</button>
-            <button class="tab-btn" onclick="switchTab('ray', this)">服务器状态</button>
-            <button class="tab-btn" onclick="switchTab('errors', this)">错误日志 <span id="err-badge" class="err-badge" style="display:none">0</span></button>
-            <button class="tab-btn" onclick="switchTab('config', this)">配置文件</button>
+            <button class="tab-btn active" onclick="switchTab('monitor', this)"><span class="tab-ic">📈</span><span class="tab-lbl">实时监控</span></button>
+            <button class="tab-btn" onclick="switchTab('statistics', this)"><span class="tab-ic">🔢</span><span class="tab-lbl">Token 统计</span></button>
+            <button class="tab-btn" onclick="switchTab('ccusage', this)"><span class="tab-ic">🧾</span><span class="tab-lbl">CC 用量</span></button>
+            <button class="tab-btn" onclick="switchTab('flow', this)"><span class="tab-ic">🧭</span><span class="tab-lbl">模型流向图</span></button>
+            <button class="tab-btn" onclick="switchTab('endpoints', this)"><span class="tab-ic">🧩</span><span class="tab-lbl">端点模型</span></button>
+            <button class="tab-btn" onclick="switchTab('perf', this)"><span class="tab-ic">⚡</span><span class="tab-lbl">性能测试</span></button>
+            <button class="tab-btn" onclick="switchTab('ray', this)"><span class="tab-ic">🖥️</span><span class="tab-lbl">服务器状态</span></button>
+            <button class="tab-btn" onclick="switchTab('errors', this)"><span class="tab-ic">🐞</span><span class="tab-lbl">错误日志</span> <span id="err-badge" class="err-badge" style="display:none">0</span></button>
+            <button class="tab-btn" onclick="switchTab('config', this)"><span class="tab-ic">⚙️</span><span class="tab-lbl">配置文件</span></button>
         </div>
 
         <!-- Monitor -->
@@ -1017,7 +1047,7 @@
                     </div>
                 </div>
             </div>
-            <div class="panel" style="margin-top:16px;">
+            <div class="panel" id="preview-panel" style="margin-top:16px;display:none;">
                 <div class="panel-header">
                     <span>流内容预览</span>
                     <span class="hint" style="display:flex;align-items:center;gap:8px;">
@@ -1151,42 +1181,38 @@
                         </div>
 
                         <div class="perf-group">
+                            <div class="perf-group-title">测试类别</div>
+                            <div class="perf-cats" id="perf-cats"><span class="perf-hint">等待代理下发类别…</span></div>
+                            <div class="toolbar" style="margin-top:8px;">
+                                <button class="btn" onclick="perfCatsAll(true)">全选</button>
+                                <button class="btn" onclick="perfCatsAll(false)">全不选</button>
+                            </div>
+                            <div class="perf-hint">每个类别是一条真实提示词（代码 / JSON / 叙事 / 说明 / 数学 / 推理 / 摘要 / 表格），输出上限由类别自带。</div>
+                        </div>
+
+                        <div class="perf-group">
                             <div class="perf-group-title">测试参数</div>
-                            <div class="perf-field">
-                                <label for="perf-min">输入长度最小</label>
-                                <input type="number" id="perf-min" class="perf-input" value="128">
-                            </div>
-                            <div class="perf-field">
-                                <label for="perf-max">输入长度最大</label>
-                                <input type="number" id="perf-max" class="perf-input" value="4096">
-                            </div>
-                            <div class="perf-field">
-                                <label for="perf-step">步长</label>
-                                <input type="number" id="perf-step" class="perf-input" value="2" step="any" style="flex:0 0 90px;">
-                                <select id="perf-stepmode" class="perf-select">
-                                    <option value="mul">倍增（×）</option>
-                                    <option value="add">递增（＋）</option>
-                                </select>
-                            </div>
-                            <div class="perf-field">
-                                <label for="perf-out">输出长度</label>
-                                <input type="number" id="perf-out" class="perf-input" value="128">
-                            </div>
                             <div class="perf-field">
                                 <label for="perf-conc">并发数</label>
                                 <input type="number" id="perf-conc" class="perf-input" value="1" min="1" max="100">
                             </div>
                             <div class="perf-field">
-                                <label for="perf-struct">模型结构长度</label>
-                                <input type="number" id="perf-struct" class="perf-input" value="16">
+                                <label for="perf-rounds">每类轮数</label>
+                                <input type="number" id="perf-rounds" class="perf-input" value="2" min="1" max="20">
                             </div>
-                            <div class="perf-hint">输入长度 = 系统提示词长度 + 用户提示词长度 + 模型结构长度</div>
+                            <div class="perf-field">
+                                <label for="perf-out">输出上限</label>
+                                <input type="number" id="perf-out" class="perf-input" placeholder="留空=用类别默认值" min="16" max="8192">
+                            </div>
+                            <div class="perf-hint">每个类别跑「轮数 × 并发」次请求；每请求指标取全部样本均值，整轮吞吐按每轮独立计算后再平均。</div>
                         </div>
 
                         <div class="perf-group">
                             <div class="perf-group-title">高级</div>
                             <label class="switch"><input type="checkbox" id="perf-usage" checked> 索取服务端 usage（stream_options.include_usage）</label>
-                            <div class="perf-hint" style="margin-bottom:8px;">开启后用上游返回的 prompt_tokens / completion_tokens 计算速度，比本地分词估算更准确。</div>
+                            <div class="perf-hint" style="margin-bottom:8px;">开启后用上游返回的 prompt_tokens / completion_tokens 计算速度；关闭时退化为服务端按字/词估算。</div>
+                            <label class="switch"><input type="checkbox" id="perf-warmup" checked> 正式测试前先预热一次</label>
+                            <div class="perf-hint" style="margin-bottom:8px;">预热请求不计入结果，用于排除建连和模型冷启动的影响。</div>
                             <textarea id="perf-extra" class="perf-area" rows="4" placeholder='额外请求参数（JSON），例如关闭思考模式：
 {"chat_template_kwargs": {"enable_thinking": false}}'></textarea>
                         </div>
@@ -1216,7 +1242,7 @@
                                 <button class="btn primary" id="perf-start" onclick="perfToggle()">开始测试</button>
                                 <button class="btn" onclick="perfClear()">清空结果</button>
                                 <div class="spacer"></div>
-                                <button class="btn" onclick="perfExportPng()">下载折线图</button>
+                                <button class="btn" onclick="perfExportPng()">下载对比图</button>
                                 <button class="btn" onclick="perfExportCsv()">下载 CSV</button>
                                 <button class="btn" onclick="perfExportMd()">下载 Markdown</button>
                             </div>
@@ -1225,30 +1251,33 @@
                                 <table class="tbl" id="perf-table">
                                     <thead>
                                         <tr>
-                                            <th>输入长度</th>
-                                            <th>预填充耗时<span class="th-unit">ms</span></th>
-                                            <th>预填充速度<span class="th-unit">tok/s · 每请求</span></th>
-                                            <th>批次吞吐<span class="th-unit">tok/s · 预填充</span></th>
-                                            <th>输出长度</th>
-                                            <th>输出耗时<span class="th-unit">ms</span></th>
-                                            <th>输出速度<span class="th-unit">tok/s · 每请求</span></th>
-                                            <th>整轮吞吐<span class="th-unit">tok/s · 输出</span></th>
-                                            <th>并发</th>
+                                            <th>类别</th>
+                                            <th>提示<span class="th-unit">tokens</span></th>
+                                            <th>TTFT<span class="th-unit">ms · 均值</span></th>
+                                            <th>TTFT<span class="th-unit">ms · 最小~最大</span></th>
+                                            <th>预填充<span class="th-unit">tok/s · 每请求</span></th>
+                                            <th>预填充批次<span class="th-unit">tok/s · 整轮</span></th>
+                                            <th>输出<span class="th-unit">tokens</span></th>
+                                            <th>解码耗时<span class="th-unit">ms</span></th>
+                                            <th>总时间<span class="th-unit">ms · 首字+解码</span></th>
+                                            <th>解码<span class="th-unit">tok/s · 每请求</span></th>
+                                            <th>解码整轮<span class="th-unit">tok/s · 整轮</span></th>
+                                            <th>样本</th>
                                             <th></th>
                                         </tr>
                                     </thead>
                                     <tbody id="perf-tbody"></tbody>
                                 </table>
                             </div>
-                            <div class="perf-hint">吞吐口径：批次吞吐 = 全组总输入 token ÷ 从发起请求到最后首字的墙钟时间；整轮输出吞吐 = 全组总输出 token ÷ 从最早首字到全部完成的墙钟时间。两者都包含并发请求之间的排队与错峰。</div>
+                            <div class="perf-hint">测试在代理进程内执行（不经浏览器），计时用 <b>time.perf_counter()</b>。<b>TTFT</b>（即客户端看到的预填充时间）= 发起请求 → 第一个内容 token；<b>总时间</b> = TTFT + 解码耗时。<b>预填充 tok/s</b> = 提示 tokens ÷ TTFT（该窗口含排队与网络，是引擎预填充速度的下界）；<b>解码 tok/s</b> = 输出 tokens ÷「首字 → 结束」。整轮列按单轮汇总后多轮取平均：预填充整轮 = 全部提示 tokens ÷「发起 → 最后首字」，解码整轮 = 全部输出 tokens ÷「最早首字 → 全部完成」。</div>
                         </div>
                     </div>
 
                     <div class="panel">
-                        <div class="panel-header"><span>速度曲线</span><span class="hint">深色为页面显示，导出 PNG 使用浅色主题</span></div>
+                        <div class="panel-header"><span>分类对比</span><span class="hint">深色为页面显示，导出 PNG 使用浅色主题</span></div>
                         <div class="panel-body perf-charts" style="max-height:none;">
-                            <div class="perf-chart-box"><canvas id="perf-chart-prefill" class="perf-chart"></canvas></div>
-                            <div class="perf-chart-box"><canvas id="perf-chart-output" class="perf-chart"></canvas></div>
+                            <div class="perf-chart-box"><canvas id="perf-chart-ttft" class="perf-chart"></canvas></div>
+                            <div class="perf-chart-box"><canvas id="perf-chart-tps" class="perf-chart"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -1360,6 +1389,8 @@
             setConnPill(true);
             socket.emit('request_initial_models');
             socket.emit('request_config');
+            // Re-establish the server-side preview filter after a reconnect.
+            socket.emit('stream_preview_subscribe', { filters: Array.from(fmap.sel) });
         });
 
         socket.on('disconnect', function () {
@@ -1370,6 +1401,8 @@
             updateInitialData(data);
             if (data.token_stats) updateTokenStats(data.token_stats);
             if (data.server_stats) updateServerStats(data.server_stats);
+            if (data.vision_redirects !== undefined) visionRedirects = data.vision_redirects || {};
+            if (data.vision_disabled !== undefined) visionDisabled = data.vision_disabled || [];
             if (data.errors) { serverErrors = data.errors; renderErrors(); updateErrBadge(); }
         });
 
@@ -1393,7 +1426,20 @@
         socket.on('connection_removed', function (data) { removeConnection(data.id); });
         socket.on('stream_started', function (data) { addStream(data.stream); });
         socket.on('stream_finished', function (data) { updateStreamStatus(data.id, 'completed'); });
-        socket.on('stream_chunk', function (data) { updateStreamData(data.data); });
+        socket.on('stream_chunk', function (data) {
+            if (data && data.data && data.data.id) fmap.chunkAt.set(data.data.id, Date.now());
+            updateStreamData(data.data);
+        });
+        // Aggregated token counts for streams whose full deltas are not being
+        // streamed to us (no matching preview selection). Streams that DO get
+        // real chunks are already counted by updateStreamData — skip those.
+        socket.on('stream_progress', function (d) {
+            if (!d || !d.id || !d.n) return;
+            const last = fmap.chunkAt.get(d.id);
+            if (last && Date.now() - last < 1500) return;
+            fmChunk(d.id);
+            fmTrackTokens(d.id, d.n);
+        });
         socket.on('server_stats_update', function (data) { updateServerStats(data); });
         socket.on('request_completed', function (data) { /* connection_removed already handles cleanup */ });
 
@@ -1405,8 +1451,8 @@
                     return m;
                 });
             }
-            if (data.vision_redirects) visionRedirects = data.vision_redirects;
-            if (data.vision_disabled) visionDisabled = data.vision_disabled;
+            if (data.vision_redirects !== undefined) visionRedirects = data.vision_redirects || {};
+            if (data.vision_disabled !== undefined) visionDisabled = data.vision_disabled || [];
             renderFlowChart();
             renderPureProxyEndpoints();
             if (endpointHealth) renderEndpoints();
@@ -1415,8 +1461,8 @@
         });
 
         socket.on('vision_redirects_update', function (data) {
-            if (data && data.vision_redirects) visionRedirects = data.vision_redirects;
-            if (data && data.vision_disabled) visionDisabled = data.vision_disabled;
+            if (data && data.vision_redirects !== undefined) visionRedirects = data.vision_redirects || {};
+            if (data && data.vision_disabled !== undefined) visionDisabled = data.vision_disabled || [];
             renderFlowChart();
         });
 
@@ -1549,6 +1595,15 @@
             const item = document.createElement('li');
             item.className = 'item active';
             item.id = 'stream-' + stream.id;
+            // Clicking a stream selects its endpoint+model, which opens the
+            // preview and subscribes the feed on the server side.
+            item.title = '点击只看该服务端/模型的流内容';
+            item.style.cursor = 'pointer';
+            (function (ep, model) {
+                item.onclick = function () {
+                    if (ep && model) fmToggle('m:' + ep + FM_SEP + model);
+                };
+            })(stream.endpoint || '', stream.final_model || stream.model || '');
             item.innerHTML = `
                 <div class="row-top">
                     <span class="url">${stream.url}</span>
@@ -1663,7 +1718,7 @@
         // Every in-flight request becomes a link and particles ride it, so the
         // direction of the traffic is readable at a glance. Servers that have
         // not seen traffic recently drop off the map entirely.
-        const FM_TTL = 90000;          // drop idle nodes/links after this long
+        const FM_TTL = 60000;          // drop idle nodes/links 1min after last traffic
         const FM_RATE_WINDOW = 60000;  // the "N/分" counters look back this far
         const FM_TPS_WINDOW = 2000;      // sliding window behind every tok/s figure
         const FM_REQ_MAX_AGE = 1800000;  // force-drop requests that never reported an end
@@ -1686,7 +1741,9 @@
             pos: {},              // anchor id  -> {l:{x,y}, r:{x,y}}
             dirty: true, lastRender: 0, lastLayout: 0, lastFoot: 0,
             dash: 0, raf: null, lastTs: 0,
-            tokBuf: [], lastEvt: '', previewId: null
+            tokBuf: [], lastEvt: '', previewId: null,
+            chunkAt: new Map(),    // request id -> last full-chunk arrival (ms)
+            probes: new Map()      // endpoint -> last liveness probe result
         };
 
         function fmTrim(arr, now) {
@@ -1765,6 +1822,7 @@
             const r = id ? fmap.reqs.get(id) : null;
             if (!r) return null;
             fmap.reqs.delete(id);
+            fmap.chunkAt.delete(id);
             const c = fmap.clients.get(r.ck);
             if (c) c.active = Math.max(0, c.active - 1);
             const s = fmap.servers.get(r.ep);
@@ -1857,7 +1915,10 @@
 
         function fmTrackTokens(id, text) {
             const now = Date.now();
-            const n = estimateTokens(text);
+            // Accepts either raw text (client-side estimate) or a token count
+            // already estimated by the server (stream_progress event).
+            const n = (typeof text === 'number') ? text : estimateTokens(text);
+            if (!n) return;
             fmap.tokBuf.push({ t: now, n: n });
             if (fmap.tokBuf.length > 4000) fmap.tokBuf.splice(0, fmap.tokBuf.length - 4000);
             const r = id ? fmap.reqs.get(id) : null;
@@ -1893,6 +1954,81 @@
             return false;
         }
 
+        // ---- Liveness probe (pure frontend) ----
+        // Sends one tiny chat completion (max_tokens=1) straight to the
+        // endpoint path and records latency / error on the node.
+        function fmProbeModel(ep) {
+            // Prefer a model this node actually served recently (on the map),
+            // then fall back to the endpoint's configured/served model list.
+            const s = fmap.servers.get(ep);
+            if (s) {
+                const names = Array.from(s.models.values()).sort(fmRank);
+                for (const e of names) {
+                    const m = findModel(e.name);
+                    if (m) return m.original_id || m.id;
+                }
+            }
+            const cfg = flowEndpointMap()[ep];
+            if (cfg && cfg.models) {
+                for (const name of cfg.models) {
+                    const m = findModel(name);
+                    if (m && (m.source_endpoint === ep || (m.available_endpoints || []).indexOf(ep) !== -1)) {
+                        return m.original_id || m.id;
+                    }
+                }
+            }
+            const mAny = (allModelsData.models || []).find(function (m) {
+                return m.source_endpoint === ep || (m.available_endpoints || []).indexOf(ep) !== -1;
+            });
+            return mAny ? (mAny.original_id || mAny.id) : '';
+        }
+
+        // Shared probe chip (topology node + flow-chart endpoint lane).
+        function probeChipHtml(ep) {
+            const pr = fmap.probes.get(ep);
+            return '<span class="fm-probe" data-ep="' + escAttr(ep) + '" title="发一条 max_tokens=1 的超短请求测试存活">' +
+                (pr && pr.state === 'run' ? '检测中…' : '测') + '</span>' +
+                (pr && pr.state === 'ok' ? '<span class="fm-probe-r ok" title="正常 ' + pr.ms + 'ms · ' + escAttr(pr.model || '') + ' · ' + new Date(pr.at).toLocaleTimeString() + '">✓' + pr.ms + 'ms</span>' : '') +
+                (pr && pr.state === 'err' ? '<span class="fm-probe-r err" title="' + escAttr(pr.err || '') + '">✗</span>' : '');
+        }
+
+        function fmProbe(ep) {
+            if (!ep) return;
+            const cur = fmap.probes.get(ep);
+            if (cur && cur.state === 'run') return;
+            fmap.probes.set(ep, { state: 'run', at: Date.now() });
+            fmRender();
+            const model = fmProbeModel(ep);
+            const t0 = performance.now();
+            const done = function (res) {
+                res.at = Date.now();
+                fmap.probes.set(ep, res);
+                fmRender();
+                // Flow chart lanes show the same chip next to endpoint nodes.
+                if (typeof renderFlowChart === 'function' && document.getElementById('flow-chart') && document.getElementById('flow-chart').innerHTML) renderFlowChart();
+            };
+            if (!model) { done({ state: 'err', err: '该端点暂无已知模型，无法测试' }); return; }
+            const ctl = new AbortController();
+            const timer = setTimeout(function () { ctl.abort(); }, 25000);
+            fetch(ep + '/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                signal: ctl.signal,
+                body: JSON.stringify({ model: model, messages: [{ role: 'user', content: 'hi' }], max_tokens: 1, stream: false })
+            }).then(function (r) {
+                clearTimeout(timer);
+                const ms = Math.round(performance.now() - t0);
+                if (r.ok) { done({ state: 'ok', ms: ms, model: model }); return; }
+                return r.json().catch(function () { return {}; }).then(function (j) {
+                    done({ state: 'err', ms: ms, err: 'HTTP ' + r.status + ' ' + (((j.error && j.error.message) || '').slice(0, 120)) });
+                });
+            }).catch(function (e) {
+                clearTimeout(timer);
+                const ms = Math.round(performance.now() - t0);
+                done({ state: 'err', ms: ms, err: e && e.name === 'AbortError' ? '超时(25s)' : String((e && e.message) || e) });
+            });
+        }
+
         function fmToggle(key) {
             if (fmap.sel.has(key)) {
                 fmap.sel.delete(key);
@@ -1922,9 +2058,16 @@
         function fmSelectionChanged() {
             const label = fmSelectionLabel();
             const hint = document.getElementById('fm-sel-hint');
-            if (hint) hint.textContent = fmap.sel.size ? ('已选 ' + label) : '全部服务端 · 点击右侧服务端/模型可筛选';
+            if (hint) hint.textContent = fmap.sel.size ? ('已选 ' + label + ' · 流内容预览已开启') : '全部服务端 · 点击右侧服务端/模型查看流内容';
             const fh = document.getElementById('stream-filter-hint');
             if (fh) fh.textContent = label;
+            // The preview panel (and the full stream_chunk feed behind it) is
+            // only active while something is selected; the server filters by
+            // these keys so unselected traffic costs no bandwidth.
+            const panel = document.getElementById('preview-panel');
+            if (panel) panel.style.display = fmap.sel.size ? '' : 'none';
+            if (!fmap.sel.size) clearStreamData();
+            socket.emit('stream_preview_subscribe', { filters: Array.from(fmap.sel) });
             fmap.dirty = true;
             fmRender();
         }
@@ -2833,6 +2976,10 @@
             }
             // Endpoint node (interactive route)
             const endpointNode = routeSelectNode(lane.target, lane.route, lane.avail);
+            // Liveness probe chip for the endpoint this lane routes to.
+            const probeChip = lane.route
+                ? '<span style="display:inline-flex;align-items:center;gap:5px;flex:none;">' + probeChipHtml(lane.route) + '</span>'
+                : '';
 
             let out = '<div class="lane">' +
                 sourceNode +
@@ -2840,6 +2987,7 @@
                 modelNode +
                 '<div class="lane-arrow">→</div>' +
                 endpointNode +
+                probeChip +
                 '</div>';
 
             // Vision group: for alias lanes, enclose the whole flow (main
@@ -2953,6 +3101,11 @@
                     return;
                 }
                 if (!e.target.closest('.sselect-menu')) closeAllSearchSelects();
+            });
+            // Liveness probe chips shown next to endpoint nodes in the lanes.
+            fc.addEventListener('click', function (e) {
+                const p = e.target.closest('.fm-probe');
+                if (p) fmProbe(p.dataset.ep);
             });
             fc.addEventListener('input', function (e) {
                 if (!e.target.classList.contains('sselect-toggle')) return;
@@ -3582,17 +3735,18 @@
         // (/v1/chat/completions) or straight at one endpoint
         // (/<prefix>/v1/chat/completions), where the proxy injects that endpoint's
         // own api_key. Every request also shows up in 实时监控 while it runs.
-        const PERF_KEY = 'proxy_perf_test_cfg';
-        const PERF_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-        const PERF_FIELDS = ['target', 'model', 'apikey', 'min', 'max', 'step', 'stepmode', 'out', 'conc',
-            'struct', 'extra', 'usage', 'processor', 'mainboard', 'memory', 'gpu', 'system', 'engine', 'enginemodel'];
+        const PERF_KEY = 'proxy_perf_test_cfg_v2';
+        const PERF_FIELDS = ['target', 'model', 'apikey', 'conc', 'rounds', 'out',
+            'extra', 'usage', 'warmup', 'processor', 'mainboard', 'memory', 'gpu', 'system', 'engine', 'enginemodel'];
         // Derived from the picked endpoint/model unless the user typed something.
         const PERF_DERIVED = ['engine', 'enginemodel'];
         let perfTesting = false;
-        let perfAbort = null;
         let perfResults = [];
         let perfStartTime = null;
         let perfInited = false;
+        let perfCats = [];        // category catalogue, published by the proxy
+        let perfCatSel = null;    // selected category keys (null = all)
+        let perfRun = {};         // what the proxy reported for the running test
 
         function perfEl(id) { return document.getElementById('perf-' + id); }
         function perfVal(id) {
@@ -3607,6 +3761,7 @@
 
         function perfOnShow() {
             if (!perfInited) { perfInit(); perfInited = true; return; }
+            if (!perfCats.length) socket.emit('bench_meta');
             perfRebuildTargets();
             perfRebuildModels();
             perfSyncMeta();
@@ -3615,6 +3770,8 @@
         function perfInit() {
             perfRebuildTargets();
             const saved = perfReadCfg();
+            if (Array.isArray(saved.cats)) perfCatSel = saved.cats.slice();
+            socket.emit('bench_meta');
             PERF_FIELDS.forEach(function (id) {
                 if (id === 'model') return;              // restored after the model list is built
                 if (!(id in saved)) return;
@@ -3644,6 +3801,41 @@
 
         function perfOnFieldChange() { perfSaveCfg(); perfSyncMeta(); }
 
+        function perfRenderCats() {
+            const box = perfEl('cats');
+            if (!box) return;
+            if (!perfCats.length) {
+                box.innerHTML = '<span class="perf-hint">等待代理下发类别…</span>';
+                return;
+            }
+            box.innerHTML = perfCats.map(function (c) {
+                const on = !perfCatSel || perfCatSel.indexOf(c.key) !== -1;
+                return '<label class="perf-cat" title="' + escAttr(c.prompt) + '">' +
+                    '<input type="checkbox" data-cat="' + escAttr(c.key) + '"' + (on ? ' checked' : '') +
+                    ' onchange="perfCatChanged()">' +
+                    '<span>' + escText(c.label || c.key) + '</span>' +
+                    '<span class="mt">' + c.max_tokens + '</span>' +
+                    '</label>';
+            }).join('');
+        }
+
+        function perfSelectedCats() {
+            const boxes = document.querySelectorAll('#perf-cats input[data-cat]');
+            if (!boxes.length) return perfCatSel ? perfCatSel.slice() : perfCats.map(function (c) { return c.key; });
+            return Array.from(boxes).filter(function (b) { return b.checked; })
+                .map(function (b) { return b.getAttribute('data-cat'); });
+        }
+
+        function perfCatChanged() {
+            perfCatSel = perfSelectedCats();
+            perfSaveCfg();
+        }
+
+        function perfCatsAll(on) {
+            document.querySelectorAll('#perf-cats input[data-cat]').forEach(function (b) { b.checked = !!on; });
+            perfCatChanged();
+        }
+
         function perfReadCfg() {
             try { return JSON.parse(localStorage.getItem(PERF_KEY) || '{}') || {}; } catch (e) { return {}; }
         }
@@ -3652,6 +3844,7 @@
             // 'apikey' is deliberately not persisted — it is a secret and is
             // normally empty anyway (the monitor talks to the proxy same-origin).
             PERF_FIELDS.forEach(function (id) { if (id !== 'apikey' && perfEl(id)) data[id] = perfVal(id); });
+            data.cats = perfSelectedCats();
             try { localStorage.setItem(PERF_KEY, JSON.stringify(data)); } catch (e) { /* quota / private mode */ }
         }
 
@@ -3770,7 +3963,11 @@
             const hw = ['processor', 'mainboard', 'memory', 'gpu', 'system']
                 .map(function (id) { return perfVal(id); }).filter(Boolean).join(' · ');
             const parts = [];
-            parts.push('<div>入口：<b>' + escText(perfRequestUrl()) + '</b>　模型：<b>' + escText(perfVal('model') || '—') + '</b>　并发：<b>' + escText(perfVal('conc') || '1') + '</b></div>');
+            parts.push('<div>入口：<b>' + escText(perfRequestUrl()) + '</b>　模型：<b>' + escText(perfVal('model') || '—') + '</b>　并发：<b>' + escText(perfVal('conc') || '1') + '</b>　每类轮数：<b>' + escText(perfVal('rounds') || '1') + '</b></div>');
+            parts.push('<div>执行位置：<b>代理进程内</b>（不经浏览器）' +
+                (perfRun && perfRun.url ? '　上游：<b>' + escText(perfRun.url) + '</b>' : '') +
+                (perfRun && perfRun.backend_model && perfRun.backend_model !== perfVal('model') ? '　后端模型：<b>' + escText(perfRun.backend_model) + '</b>' : '') +
+                '</div>');
             parts.push('<div>引擎：<b>' + escText(perfVal('engine') || '—') + '</b>　引擎模型：<b>' + escText(perfVal('enginemodel') || '—') + '</b></div>');
             if (hw) parts.push('<div>硬件：' + escText(hw) + '</div>');
             if (perfStartTime) parts.push('<div>测试开始：' + escText(perfStartTime.toLocaleString()) + '</div>');
@@ -3810,179 +4007,14 @@
         }
 
         // ---- Token counting (same rule set as the standalone tool) ----
-        function perfCountTokens(text) {
-            const specialApostropheWords = ["'cause", "'em", "'kay", "'nother", "'round", "'scuse", "'sup", "'til"];
-            const oneTokenWords = ["don't", "can't", "won't"];
-            const twoTokenWords = [
-                "I'm", "we're", "you're", "they're", "I've", "we've", "you've", "they've",
-                "I'd", "we'd", "you'd", "he'd", "she'd", "they'd",
-                "I'll", "we'll", "you'll", "he'll", "she'll", "they'll",
-                "isn't", "aren't", "wasn't", "weren't", "doesn't", "didn't", "hasn't", "haven't",
-                "shouldn't", "wouldn't", "couldn't",
-                "it's", "he's", "she's", "that's", "there's", "who's"
-            ];
-            let tokens = [], t = text || '';
-            specialApostropheWords.concat(oneTokenWords).forEach(function (word) {
-                const reg = new RegExp(word.replace("'", "\\'"), 'gi');
-                t = t.replace(reg, function (m) { tokens.push(m); return ' '.repeat(m.length); });
-            });
-            twoTokenWords.forEach(function (word) {
-                const reg = new RegExp(word.replace("'", "\\'"), 'gi');
-                t = t.replace(reg, function (m) {
-                    const parts = m.split(/'/);
-                    tokens.push(parts[0]);
-                    tokens.push("'" + parts[1]);
-                    return ' '.repeat(m.length);
-                });
-            });
-            const enPunct = /[,.!?;:'"()\[\]{}]/;
-            const cnPunct = /[，。！？；：‘’“”（）【】｛｝]/;
-            const isSeparator = function (ch) {
-                return ch === ' ' || enPunct.test(ch) || cnPunct.test(ch) || ch === '\n' || ch === '\t' || ch === '\r';
-            };
-            let buffer = '', i = 0;
-            while (i < t.length) {
-                const ch = t[i];
-                if (isSeparator(ch)) {
-                    if (buffer.length) { tokens.push(buffer); buffer = ''; }
-                    if (ch !== ' ' && ch !== '\t' && ch !== '\r') tokens.push(ch);
-                    i++; continue;
-                }
-                if (/[0-9]/.test(ch)) {
-                    if (buffer.length) { tokens.push(buffer); buffer = ''; }
-                    tokens.push(ch);
-                    i++; continue;
-                }
-                buffer += ch;
-                i++;
-            }
-            if (buffer.length) tokens.push(buffer);
-            return tokens.filter(function (x) { return x && x.length; }).length;
-        }
 
-        function perfSystemPrompt() { return 'You are a assistant.'; }
 
-        function perfUserPrompt(length) {
-            const fixed = '\nRepeat the above content one hundred times.';
-            const need = length - perfCountTokens(fixed);
-            let prompt = '';
-            for (let i = 0; i < need; i++) {
-                if (i > 0) prompt += ' ';
-                prompt += PERF_WORDS[Math.floor(Math.random() * PERF_WORDS.length)];
-            }
-            return prompt + fixed;
-        }
-
-        function perfErrMsg(err) {
-            const msg = (err && err.message) || '未知错误';
-            if (err && err.name === 'AbortError') return '请求已中止';
-            if (msg.indexOf('Failed to fetch') !== -1) return '无法连接到代理，请检查服务是否运行';
-            return msg;
-        }
-
-        // ---- One streamed request ----
-        async function perfExec(url, model, apiKey, systemPrompt, userPrompt, inputLength, maxOut, extra, useUsage, signal) {
-            const sysLen = perfCountTokens(systemPrompt);
-            const usrLen = userPrompt ? perfCountTokens(userPrompt) : 0;
-            const fail = function (message) {
-                return {
-                    inputLength: inputLength, realInputLength: inputLength,
-                    prefillTime: 0, prefillSpeed: 0, outputLength: 0, outputTime: 0, outputSpeed: 0,
-                    systemPrompt: systemPrompt, systemPromptLength: sysLen,
-                    userPrompt: userPrompt || '', userPromptLength: usrLen,
-                    output: '', error: true, errorMessage: message
-                };
-            };
-            let streamChunks = 0, srvCompletion = 0, srvPrompt = 0, output = '';
-            let tReq, tResp, tFirst, tEnd;
-            try {
-                const headers = { 'Content-Type': 'application/json' };
-                if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
-                const body = Object.assign({
-                    model: model,
-                    messages: [
-                        { role: 'system', content: systemPrompt },
-                        { role: 'user', content: userPrompt }
-                    ],
-                    max_tokens: maxOut,
-                    temperature: 1,
-                    top_p: 0.1,
-                    stream: true
-                }, useUsage ? { stream_options: { include_usage: true } } : {}, extra);
-
-                tReq = performance.now();
-                const resp = await fetch(url, {
-                    method: 'POST', headers: headers, body: JSON.stringify(body), signal: signal
-                });
-                if (!resp.ok) {
-                    let detail = '';
-                    try { detail = (await resp.text()).slice(0, 200); } catch (e) { /* body already consumed */ }
-                    return fail('HTTP ' + resp.status + (detail ? ' · ' + detail : ''));
-                }
-                const reader = resp.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let buf = '';
-                while (true) {
-                    const chunk = await reader.read();
-                    tResp = performance.now();
-                    if (chunk.done) { if (!tEnd) tEnd = tResp; break; }
-                    buf += decoder.decode(chunk.value, { stream: true });
-                    const lines = buf.split('\n');
-                    buf = lines.pop();
-                    for (const line of lines) {
-                        const s = line.trim();
-                        if (!s || s.indexOf('data:') !== 0) continue;
-                        const payload = s.slice(5).trim();
-                        if (payload === '[DONE]') { tEnd = tResp; continue; }
-                        let json;
-                        try { json = JSON.parse(payload); } catch (e) { continue; }
-                        const choice = json.choices && json.choices[0];
-                        const delta = (choice && (choice.delta || choice.message)) || null;
-                        const piece = delta ? (delta.content || delta.reasoning || delta.reasoning_content || '') : '';
-                        if (piece) {
-                            output += piece;
-                            streamChunks++;
-                            if (!tFirst) tFirst = tResp;
-                        }
-                        if (json.usage) {
-                            if (json.usage.completion_tokens) srvCompletion = json.usage.completion_tokens;
-                            if (json.usage.prompt_tokens) srvPrompt = json.usage.prompt_tokens;
-                        }
-                    }
-                }
-                if (!tFirst) return fail('未收到任何输出内容（上游可能拒绝了请求）');
-
-                const prefillTime = tFirst - tReq;
-                const outputTime = (tEnd || tResp) - tFirst;
-                // A streamed SSE chunk may contain zero, one, or several model
-                // tokens.  Only use the upstream usage count as authoritative;
-                // otherwise fall back to the local tokenizer estimate rather
-                // than incorrectly treating chunks as tokens.
-                const outputLength = srvCompletion > 0 ? srvCompletion : perfCountTokens(output);
-                // Prefer the upstream's own prompt_tokens over the local estimate.
-                const realIn = srvPrompt > 0 ? srvPrompt : inputLength;
-                return {
-                    inputLength: inputLength,
-                    realInputLength: realIn,
-                    prefillTime: prefillTime,
-                    prefillSpeed: prefillTime > 0 ? realIn / (prefillTime / 1000) : 0,
-                    outputLength: outputLength,
-                    outputTime: outputTime,
-                    outputSpeed: outputTime > 0 ? outputLength / (outputTime / 1000) : 0,
-                    requestStart: tReq,
-                    firstTokenAt: tFirst,
-                    requestEnd: tEnd || tResp,
-                    streamChunks: streamChunks,
-                    systemPrompt: systemPrompt, systemPromptLength: sysLen,
-                    userPrompt: userPrompt, userPromptLength: usrLen,
-                    output: output, error: false
-                };
-            } catch (err) {
-                return fail(perfErrMsg(err));
-            }
-        }
 
         // ---- Test run ----
+        // ---- Test run: the proxy executes it, this page only drives the UI ----
+        // Timing happens inside the proxy process (time.perf_counter around the
+        // upstream stream), so browser scheduling and SSE parsing no longer
+        // show up in the first-token or decode numbers.
         function perfToggle() { perfTesting ? perfStop() : perfStart(); }
 
         function perfSetRunning(running) {
@@ -4002,31 +4034,19 @@
         }
 
         function perfStop() {
-            perfSetRunning(false);
-            if (perfAbort) { perfAbort.abort(); perfAbort = null; }
+            socket.emit('bench_stop');
+            perfProgress('正在停止…');
         }
 
-        function perfPlan(min, max, step, mode) {
-            const lens = [];
-            let cur = min;
-            while (cur <= max && lens.length < 64) {
-                lens.push(Math.round(cur));
-                const next = mode === 'add' ? cur + step : cur * step;
-                if (next <= cur) break;
-                cur = next;
-            }
-            return lens;
-        }
-
-        async function perfStart() {
-            const url = perfRequestUrl();
+        function perfStart() {
             const model = perfVal('model');
-            const apiKey = perfVal('apikey');
-            const min = perfNum('min', NaN), max = perfNum('max', NaN);
-            const step = perfNum('step', NaN), mode = perfVal('stepmode') || 'mul';
-            const maxOut = perfNum('out', NaN), conc = parseInt(perfVal('conc'), 10) || 1;
-            const struct = perfVal('struct') === '' ? 0 : perfNum('struct', 0);
-            const useUsage = !!perfVal('usage');
+            if (!model) { showToast('请先选择模型', 'error'); return; }
+            const cats = perfSelectedCats();
+            if (!cats.length) { showToast('请至少选择一个测试类别', 'error'); return; }
+            const conc = parseInt(perfVal('conc'), 10) || 1;
+            const rounds = parseInt(perfVal('rounds'), 10) || 1;
+            if (conc < 1 || conc > 100) { showToast('并发数需要在 1-100 之间', 'error'); return; }
+            if (rounds < 1 || rounds > 20) { showToast('每类轮数需要在 1-20 之间', 'error'); return; }
 
             let extra = {};
             const extraText = (perfVal('extra') || '').trim();
@@ -4034,132 +4054,67 @@
                 try { extra = JSON.parse(extraText); }
                 catch (e) { showToast('额外参数 JSON 解析失败：' + e.message, 'error'); return; }
             }
-            if (!model) { showToast('请先选择模型', 'error'); return; }
-            if (isNaN(min) || isNaN(max) || isNaN(step) || isNaN(maxOut)) { showToast('请填写完整的测试参数', 'error'); return; }
-            if (min < 20) { showToast('输入长度最小值需要 ≥ 20', 'error'); return; }
-            if (max < min) { showToast('输入长度最大值需要 ≥ 最小值', 'error'); return; }
-            if (mode === 'mul' ? step <= 1 : step < 1) { showToast(mode === 'mul' ? '倍增步长需要 > 1' : '递增步长需要 ≥ 1', 'error'); return; }
-            if (maxOut < 3) { showToast('输出长度需要 ≥ 3', 'error'); return; }
-            if (conc < 1 || conc > 100) { showToast('并发数需要在 1-100 之间', 'error'); return; }
 
             perfSaveCfg();
             perfResults = [];
             perfStartTime = new Date();
             perfRenderTable();
             perfDrawCharts();
+            perfRenderSummary();
             perfSetRunning(true);
-            perfAbort = new AbortController();
-            const signal = perfAbort.signal;
-
-            const lens = perfPlan(min, max, step, mode);
-            const systemPrompt = perfSystemPrompt();
-            const sysLen = perfCountTokens(systemPrompt);
-
-            // Warm up the HTTP path (connection + upstream model load) first.
-            perfProgress('预热连接…');
-            try {
-                await fetch(url, {
-                    method: 'POST',
-                    headers: Object.assign({ 'Content-Type': 'application/json' }, apiKey ? { Authorization: 'Bearer ' + apiKey } : {}),
-                    body: JSON.stringify(Object.assign({
-                        model: model,
-                        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: perfUserPrompt(10) }],
-                        max_tokens: 3, temperature: 0.1, top_p: 0.1, stream: true
-                    }, extra)),
-                    signal: signal
-                }).then(function (r) { return r.body ? r.body.getReader().read().then(function () { return r.body.cancel(); }) : null; });
-            } catch (e) { /* warm-up failures are not fatal */ }
-
-            for (let idx = 0; idx < lens.length; idx++) {
-                if (!perfTesting) break;
-                const inputLength = lens[idx];
-                perfProgress('测试中 · 输入长度 ' + inputLength + '（' + (idx + 1) + '/' + lens.length + '）· 并发 ' + conc);
-
-                const userLen = Math.max(1, inputLength - sysLen - struct);
-                // Build prompts before starting the batch clock. Large prompts
-                // can take measurable time to construct in the browser, but that
-                // is client preparation rather than proxy/model latency.
-                const prompts = [];
-                for (let i = 0; i < conc; i++) prompts.push(perfUserPrompt(userLen));
-                // One common clock is required for batch throughput. Per-request
-                // decode durations cannot be added or compared with max(): their
-                // intervals may be concurrent, partially overlap, or be queued.
-                const batchStart = performance.now();
-                const jobs = [];
-                for (let i = 0; i < conc; i++) {
-                    jobs.push(perfExec(url, model, apiKey, systemPrompt, prompts[i],
-                        inputLength, maxOut, extra, useUsage, signal));
-                }
-                const all = await Promise.all(jobs);
-                const batchSettled = performance.now();
-                if (!perfTesting) break;
-
-                const ok = all.filter(function (r) { return !r.error; });
-                const bad = all.filter(function (r) { return r.error; });
-                let row;
-                if (!ok.length) {
-                    row = {
-                        inputLength: inputLength, error: true, concurrency: conc,
-                        errorMessage: bad.length ? bad[0].errorMessage : '未知错误',
-                        systemPrompt: systemPrompt, systemPromptLength: sysLen,
-                        userPromptLength: userLen, allResults: all,
-                        successCount: 0, errorCount: bad.length
-                    };
-                } else {
-                    const avg = function (fn) { return ok.reduce(function (s, r) { return s + fn(r); }, 0) / ok.length; };
-                    const maxPrefill = Math.max.apply(null, ok.map(function (r) { return r.prefillTime; }));
-                    const maxOutput = Math.max.apply(null, ok.map(function (r) { return r.outputTime; }));
-                    const totalIn = ok.reduce(function (s, r) { return s + r.realInputLength; }, 0);
-                    const totalOut = ok.reduce(function (s, r) { return s + r.outputLength; }, 0);
-                    const lastFirst = Math.max.apply(null, ok.map(function (r) { return r.firstTokenAt || batchSettled; }));
-                    const firstFirst = Math.min.apply(null, ok.map(function (r) { return r.firstTokenAt || batchSettled; }));
-                    const lastEnd = Math.max.apply(null, ok.map(function (r) { return r.requestEnd || batchSettled; }));
-                    const batchPrefillTime = Math.max(0, lastFirst - batchStart);
-                    const batchTotalTime = Math.max(0, lastEnd - batchStart);
-                    const decodeWindowTime = Math.max(0, lastEnd - firstFirst);
-                    row = {
-                        inputLength: inputLength,
-                        realInputLength: Math.round(avg(function (r) { return r.realInputLength; })),
-                        prefillTime: avg(function (r) { return r.prefillTime; }),
-                        prefillSpeed: avg(function (r) { return r.prefillSpeed; }),
-                        outputLength: Math.round(avg(function (r) { return r.outputLength; })),
-                        outputTime: avg(function (r) { return r.outputTime; }),
-                        outputSpeed: avg(function (r) { return r.outputSpeed; }),
-                        // Use common wall-clock windows for aggregate rates. A
-                        // longest-single-request denominator excludes time while
-                        // that request is queued and can falsely multiply a
-                        // serialized run by the client concurrency.
-                        totalPrefillSpeed: batchPrefillTime > 0 ? totalIn / (batchPrefillTime / 1000) : 0,
-                        totalOutputSpeed: decodeWindowTime > 0 ? totalOut / (decodeWindowTime / 1000) : 0,
-                        batchPrefillTime: batchPrefillTime,
-                        batchTotalTime: batchTotalTime,
-                        decodeWindowTime: decodeWindowTime,
-                        decodeWindowSpeed: decodeWindowTime > 0 ? totalOut / (decodeWindowTime / 1000) : 0,
-                        batchTotalSpeed: batchTotalTime > 0 ? totalOut / (batchTotalTime / 1000) : 0,
-                        minPrefillTime: Math.min.apply(null, ok.map(function (r) { return r.prefillTime; })),
-                        maxPrefillTime: maxPrefill,
-                        minOutputTime: Math.min.apply(null, ok.map(function (r) { return r.outputTime; })),
-                        maxOutputTime: maxOutput,
-                        systemPrompt: systemPrompt, systemPromptLength: sysLen,
-                        userPrompt: ok[0].userPrompt, userPromptLength: userLen,
-                        output: ok[0].output, error: false, concurrency: conc,
-                        successCount: ok.length, errorCount: bad.length,
-                        allResults: all
-                    };
-                }
-                perfResults.push(row);
-                perfRenderTable();
-                perfDrawCharts();
-                perfRenderSummary();
-                await new Promise(function (r) { setTimeout(r, 1000); });
-            }
-
-            const finished = perfTesting;
-            perfSetRunning(false);
-            perfAbort = null;
-            if (finished) showToast('性能测试完成，共 ' + perfResults.length + ' 组', 'success');
+            perfProgress('已提交给代理，等待开始…');
+            socket.emit('bench_start', {
+                target: perfVal('target') || '',
+                model: model,
+                api_key: perfVal('apikey') || '',
+                categories: cats,
+                concurrency: conc,
+                rounds: rounds,
+                max_tokens: parseInt(perfVal('out'), 10) || 0,
+                include_usage: !!perfVal('usage'),
+                warmup: !!perfVal('warmup'),
+                extra: extra
+            });
         }
 
+        socket.on('bench_meta', function (data) {
+            perfCats = (data && data.categories) || [];
+            perfRenderCats();
+            if (data && data.running) { perfSetRunning(true); perfProgress('代理正在运行测试…'); }
+        });
+
+        socket.on('bench_started', function (data) {
+            perfRun = data || {};
+            perfSetRunning(true);
+            perfRenderSummary();
+            perfProgress('测试中…');
+        });
+
+        socket.on('bench_progress', function (data) {
+            if (data && data.message) perfProgress(data.message);
+        });
+
+        socket.on('bench_row', function (data) {
+            if (!data || !data.row) return;
+            perfResults.push(data.row);
+            perfRenderTable();
+            perfDrawCharts();
+            perfRenderSummary();
+        });
+
+        socket.on('bench_done', function (data) {
+            perfSetRunning(false);
+            const n = (data && data.count) || perfResults.length;
+            if (data && data.cancelled) showToast('测试已停止，已完成 ' + n + ' 个类别', 'info');
+            else showToast('分类测试完成，共 ' + n + ' 个类别', 'success');
+        });
+
+        socket.on('bench_error', function (data) {
+            // A refusal ("already running") must not clear the running state of
+            // the test that is still going.
+            if (!data || data.fatal !== false) perfSetRunning(false);
+            showToast((data && data.message) || '测试失败', 'error');
+        });
         function perfClear() {
             if (perfTesting) { showToast('请先停止测试', 'error'); return; }
             perfResults = [];
@@ -4179,26 +4134,29 @@
             const tb = perfEl('tbody');
             if (!tb) return;
             if (!perfResults.length) {
-                tb.innerHTML = '<tr><td colspan="10"><p class="empty">尚无测试数据，点击「开始测试」</p></td></tr>';
+                tb.innerHTML = '<tr><td colspan="13"><p class="empty">尚无测试数据，点击「开始测试」</p></td></tr>';
                 return;
             }
             tb.innerHTML = perfResults.map(function (r, i) {
+                const name = '<b>' + escText(r.label || r.key) + '</b>';
                 if (r.error) {
-                    return '<tr><td class="num">' + r.inputLength + '</td>' +
-                        '<td colspan="8" style="color:var(--red);">' + escText(r.errorMessage || '错误') + '</td>' +
+                    return '<tr><td>' + name + '</td>' +
+                        '<td colspan="11" style="color:var(--red);">' + escText(r.error_message || '错误') + '</td>' +
                         '<td><button class="perf-mini-btn" onclick="perfDetail(' + i + ')">详情</button></td></tr>';
                 }
-                const conc = r.concurrency || 1;
                 return '<tr>' +
-                    '<td class="num">' + r.inputLength + (r.realInputLength && r.realInputLength !== r.inputLength ? ' <span style="color:var(--text-faint);font-weight:500;">(' + r.realInputLength + ')</span>' : '') + '</td>' +
-                    '<td>' + perfFix(r.prefillTime) + '</td>' +
-                    '<td class="num" style="color:var(--blue);">' + perfFix(r.prefillSpeed) + '</td>' +
-                    '<td>' + (conc > 1 ? perfFix(r.totalPrefillSpeed) : '-') + '</td>' +
-                    '<td>' + r.outputLength + '</td>' +
-                    '<td>' + perfFix(r.outputTime) + '</td>' +
-                    '<td class="num" style="color:var(--green);">' + perfFix(r.outputSpeed) + '</td>' +
-                    '<td>' + (conc > 1 ? perfFix(r.totalOutputSpeed) : '-') + '</td>' +
-                    '<td>' + conc + (r.errorCount ? ' <span style="color:var(--red);">(' + r.errorCount + ' 失败)</span>' : '') + '</td>' +
+                    '<td>' + name + '</td>' +
+                    '<td class="num">' + r.prompt_tokens + '</td>' +
+                    '<td class="num" style="color:var(--amber);">' + perfFix(r.ttft_ms, 0) + '</td>' +
+                    '<td class="num" style="color:var(--text-faint);">' + perfFix(r.ttft_min_ms, 0) + ' ~ ' + perfFix(r.ttft_max_ms, 0) + '</td>' +
+                    '<td class="num" style="color:var(--blue);">' + perfFix(r.prefill_speed) + '</td>' +
+                    '<td class="num">' + perfFix(r.batch_prefill_speed) + '</td>' +
+                    '<td class="num">' + r.output_tokens + '</td>' +
+                    '<td class="num">' + perfFix(r.decode_ms, 0) + '</td>' +
+                    '<td class="num" style="color:var(--accent-2);">' + perfFix(r.total_ms, 0) + '</td>' +
+                    '<td class="num" style="color:var(--green);">' + perfFix(r.output_speed) + '</td>' +
+                    '<td class="num">' + perfFix(r.batch_output_speed) + '</td>' +
+                    '<td class="num">' + r.success + (r.errors ? ' <span style="color:var(--red);">(' + r.errors + ' 失败)</span>' : '') + '</td>' +
                     '<td><button class="perf-mini-btn" onclick="perfDetail(' + i + ')">详情</button></td>' +
                     '</tr>';
             }).join('');
@@ -4207,52 +4165,51 @@
         function perfDetail(i) {
             const r = perfResults[i];
             if (!r) return;
-            const conc = r.concurrency || 1;
             const kv = [];
-            kv.push(['输入长度', r.inputLength]);
-            if (r.realInputLength) kv.push(['实际 prompt_tokens', r.realInputLength]);
-            kv.push(['系统提示词长度', r.systemPromptLength]);
-            kv.push(['用户提示词长度', r.userPromptLength]);
+            kv.push(['类别', (r.label || '') + ' (' + r.key + ')']);
+            kv.push(['输出上限', r.max_tokens]);
+            kv.push(['成功 / 失败', r.success + ' / ' + r.errors]);
             if (!r.error) {
-                kv.push(['输出长度', r.outputLength]);
-                kv.push(['预填充耗时', perfFix(r.prefillTime) + ' ms']);
-                kv.push(['每请求平均预填充速度', perfFix(r.prefillSpeed) + ' token/s']);
-                kv.push(['输出耗时', perfFix(r.outputTime) + ' ms']);
-                kv.push(['每请求平均输出速度', perfFix(r.outputSpeed) + ' token/s']);
-                if (conc > 1) {
-                    kv.push(['并发数', conc]);
-                    kv.push(['成功 / 失败', r.successCount + ' / ' + r.errorCount]);
-                    kv.push(['预填充耗时范围', perfFix(r.minPrefillTime) + ' ~ ' + perfFix(r.maxPrefillTime) + ' ms']);
-                    kv.push(['输出耗时范围', perfFix(r.minOutputTime) + ' ~ ' + perfFix(r.maxOutputTime) + ' ms']);
-                    kv.push(['批次首字阶段', perfFix(r.batchPrefillTime) + ' ms']);
-                    kv.push(['整轮墙钟耗时', perfFix(r.batchTotalTime) + ' ms']);
-                    kv.push(['解码活动窗口', perfFix(r.decodeWindowTime) + ' ms']);
-                    kv.push(['预填充批次吞吐（总输入 ÷ 请求→最后首字）', perfFix(r.totalPrefillSpeed) + ' token/s']);
-                    kv.push(['整轮输出吞吐（总输出 ÷ 最早首字→全部完成）', perfFix(r.totalOutputSpeed) + ' token/s']);
-                    kv.push(['解码窗口吞吐（总输出 ÷ 首字→全部完成）', perfFix(r.decodeWindowSpeed) + ' token/s']);
-                    if (r.batchTotalSpeed) kv.push(['端到端吞吐（总输出 ÷ 整轮墙钟）', perfFix(r.batchTotalSpeed) + ' token/s']);
-                    if (r.decodeWindowSpeed && r.outputSpeed && r.decodeWindowSpeed < r.outputSpeed) {
-                        kv.push(['提示', '解码窗口吞吐低于每请求速度，说明这组请求没有真正并行解码（上游在排队/串行处理）']);
-                    }
+                kv.push(['提示 tokens', r.prompt_tokens]);
+                kv.push(['输出 tokens', r.output_tokens + (r.usage_reported ? '（上游 usage）' : '（服务端估算）')]);
+                kv.push(['首字延迟 均值', perfFix(r.ttft_ms, 1) + ' ms']);
+                kv.push(['首字延迟 P50', perfFix(r.ttft_p50_ms, 1) + ' ms']);
+                kv.push(['首字延迟 范围', perfFix(r.ttft_min_ms, 1) + ' ~ ' + perfFix(r.ttft_max_ms, 1) + ' ms']);
+                kv.push(['解码耗时', perfFix(r.decode_ms, 1) + ' ms']);
+                kv.push(['整请求耗时', perfFix(r.total_ms, 1) + ' ms']);
+                kv.push(['每请求预填充 tok/s（提示 tokens ÷ TTFT）', perfFix(r.prefill_speed)]);
+                kv.push(['每请求解码 tok/s（输出 tokens ÷ 首字→结束）', perfFix(r.output_speed)]);
+                if (r.batch_prefill_speed) kv.push(['预填充整轮吞吐（每轮总提示 ÷ 发起→最后首字）', perfFix(r.batch_prefill_speed) + ' token/s']);
+                kv.push(['解码整轮吞吐（每轮总输出 ÷ 最早首字→全部完成）', perfFix(r.batch_output_speed) + ' token/s']);
+                if (r.end_to_end_speed) kv.push(['端到端吞吐（每轮总输出 ÷ 整轮墙钟）', perfFix(r.end_to_end_speed) + ' token/s']);
+                if (r.batch_output_speed && r.output_speed && r.batch_output_speed < r.output_speed) {
+                    kv.push(['提示', '整轮吞吐低于每请求速度，说明这批请求没有真正并行解码（上游在排队/串行处理）']);
                 }
             } else {
-                kv.push(['错误', r.errorMessage || '未知错误']);
+                kv.push(['错误', r.error_message || '未知错误']);
             }
 
-            const errs = (r.allResults || []).filter(function (x) { return x.error; });
             let html = '<div class="perf-modal-box" onclick="event.stopPropagation()">' +
-                '<div class="perf-modal-head"><h3>第 ' + (i + 1) + ' 组 · 输入长度 ' + r.inputLength + '</h3>' +
+                '<div class="perf-modal-head"><h3>' + escText(r.label || r.key) + ' · 分类测试详情</h3>' +
                 '<div class="spacer" style="flex:1"></div><button class="btn" onclick="perfCloseDetail()">关闭</button></div>' +
                 '<div class="perf-kv">' + kv.map(function (p) {
                     return '<span>' + escText(p[0]) + '：<b>' + escText(String(p[1])) + '</b></span>';
                 }).join('') + '</div>';
-            if (errs.length) {
-                html += '<div class="perf-pre-label">失败请求（' + errs.length + '）</div><div class="perf-pre">' +
-                    escText(errs.map(function (e) { return e.errorMessage; }).join('\n')) + '</div>';
+
+            const rounds = r.rounds || [];
+            if (rounds.length > 1) {
+                html += '<div class="perf-pre-label">每轮整轮吞吐（token/s）</div><div class="perf-pre">' +
+                    escText(rounds.map(function (x) {
+                        return '第 ' + x.round + ' 轮 · 成功 ' + x.success + ' · 整轮 ' + perfFix(x.batch_output_speed) +
+                               ' · 端到端 ' + perfFix(x.end_to_end_speed) + ' · 解码窗口 ' + perfFix(x.decode_window_ms, 0) + ' ms';
+                    }).join('\n')) + '</div>';
             }
-            html += '<div class="perf-pre-label">系统提示词</div><div class="perf-pre">' + escText(r.systemPrompt || '') + '</div>';
-            html += '<div class="perf-pre-label">用户提示词</div><div class="perf-pre">' + escText(r.userPrompt || '') + '</div>';
-            html += '<div class="perf-pre-label">模型输出</div><div class="perf-pre">' + escText(r.output || '') + '</div>';
+            if ((r.error_messages || []).length) {
+                html += '<div class="perf-pre-label">失败请求（' + r.errors + '）</div><div class="perf-pre">' +
+                    escText(r.error_messages.join('\n')) + '</div>';
+            }
+            html += '<div class="perf-pre-label">提示词</div><div class="perf-pre">' + escText(r.prompt || '') + '</div>';
+            html += '<div class="perf-pre-label">模型输出（首个样本）</div><div class="perf-pre">' + escText(r.sample_output || '') + '</div>';
             html += '</div>';
 
             const overlay = document.createElement('div');
@@ -4262,7 +4219,6 @@
             overlay.addEventListener('click', perfCloseDetail);
             document.body.appendChild(overlay);
         }
-
         function perfCloseDetail() {
             const el = document.getElementById('perf-modal');
             if (el) el.remove();
@@ -4272,48 +4228,55 @@
         const PERF_THEME_DARK = { bg: '#0d121d', text: '#e6ebf5', dim: '#8b96ad', grid: 'rgba(255,255,255,.08)', axis: '#3a4560' };
         const PERF_THEME_LIGHT = { bg: '#ffffff', text: '#111827', dim: '#4b5563', grid: '#e5e7eb', axis: '#111827' };
 
-        function perfChartLines(theme) {
+        function perfChartData() {
             const xs = perfResults.filter(function (r) { return !r.error; });
-            const conc = perfResults.length ? (perfResults[0].concurrency || 1) : 1;
+            const conc = (perfRun && perfRun.concurrency) || 1;
+            const batchLabel = conc > 1 ? conc + ' 并发整轮' : '整轮';
             return {
-                x: xs.map(function (r) { return r.inputLength; }),
+                x: xs.map(function (r) { return r.label || r.key; }),
                 conc: conc,
-                prefill: conc > 1
-                    ? [{ data: xs.map(function (r) { return r.prefillSpeed; }), label: '并发中每请求平均', color: '#60a5fa' },
-                       { data: xs.map(function (r) { return r.totalPrefillSpeed; }), label: conc + ' 并发批次吞吐', color: '#a78bfa' }]
-                    : [{ data: xs.map(function (r) { return r.prefillSpeed; }), label: '预填充速度', color: '#60a5fa' }],
-                output: conc > 1
-                    ? [{ data: xs.map(function (r) { return r.outputSpeed; }), label: '并发中每请求平均', color: '#34d399' },
-                       { data: xs.map(function (r) { return r.totalOutputSpeed; }), label: conc + ' 并发整轮吞吐', color: '#fbbf24' }]
-                    : [{ data: xs.map(function (r) { return r.outputSpeed; }), label: '输出速度', color: '#34d399' }]
+                // Every duration on one ms axis. The prefill window IS the
+                // TTFT window as seen from the client, so it is the mean bar
+                // rather than a separate series; decode + total sit next to it
+                // to show what share of a request is spent waiting.
+                ttft: [
+                    { data: xs.map(function (r) { return r.ttft_ms; }), label: '预填充时间 · TTFT 均值', color: '#fbbf24' },
+                    { data: xs.map(function (r) { return r.ttft_min_ms; }), label: 'TTFT 最小', color: '#34d399' },
+                    { data: xs.map(function (r) { return r.ttft_max_ms; }), label: 'TTFT 最大', color: '#f87171' },
+                    { data: xs.map(function (r) { return r.decode_ms; }), label: '解码时间', color: '#60a5fa' },
+                    { data: xs.map(function (r) { return r.total_ms; }), label: '总时间', color: '#a78bfa' }
+                ],
+                // Both rates are token/s, so they belong on one shared axis:
+                // the height gap between them *is* the finding (prefill runs
+                // several times faster than decode). Blue family = prefill,
+                // green/amber = decode.
+                tps: [
+                    { data: xs.map(function (r) { return r.prefill_speed; }), label: '预填充 · 每请求', color: '#60a5fa' },
+                    { data: xs.map(function (r) { return r.batch_prefill_speed; }), label: '预填充 · ' + batchLabel, color: '#a78bfa' },
+                    { data: xs.map(function (r) { return r.output_speed; }), label: '解码 · 每请求', color: '#34d399' },
+                    { data: xs.map(function (r) { return r.batch_output_speed; }), label: '解码 · ' + batchLabel, color: '#fbbf24' }
+                ]
             };
         }
 
-        function perfDrawCharts(theme, prefillCanvas, outputCanvas) {
+        function perfDrawCharts(theme, ttftCanvas, tpsCanvas) {
             // Export passes detached canvases: those render at fixed size.
-            const fixed = !!prefillCanvas;
+            const fixed = !!ttftCanvas;
             theme = theme || PERF_THEME_DARK;
-            const c1 = prefillCanvas || perfEl('chart-prefill');
-            const c2 = outputCanvas || perfEl('chart-output');
+            const c1 = ttftCanvas || perfEl('chart-ttft');
+            const c2 = tpsCanvas || perfEl('chart-tps');
             if (!c1 || !c2) return;
-            const d = perfChartLines();
+            const d = perfChartData();
             const suffix = d.conc > 1 ? '（' + d.conc + ' 并发）' : '';
-            perfDrawLine(c1, d.x, d.prefill, '预填充速度' + suffix, '输入长度', 'token/s', theme, fixed);
-            perfDrawLine(c2, d.x, d.output, '输出速度' + suffix, '输入长度', 'token/s', theme, fixed);
+            perfDrawBars(c1, d.x, d.ttft, '耗时分解：预填充 / 解码 / 总时间' + suffix, '类别', 'ms', theme, fixed);
+            perfDrawBars(c2, d.x, d.tps, '预填充 / 解码吞吐' + suffix, '类别', 'token/s', theme, fixed);
         }
 
-        function perfNiceMax(max) {
-            if (!(max > 0)) return 1;
-            const exp = Math.floor(Math.log10(max));
-            const base = Math.pow(10, exp);
-            if (max <= base) return base;
-            if (max <= 2 * base) return 2 * base;
-            if (max <= 5 * base) return 5 * base;
-            return 10 * base;
-        }
-
-        function perfDrawLine(canvas, xData, lines, title, xLabel, yLabel, theme, fixed) {
-            const multi = lines.length > 1;
+        // Categories are nominal, not a continuum, so the comparison is drawn as
+        // grouped bars rather than a line: there is nothing to interpolate
+        // between "coding" and "json".
+        function perfDrawBars(canvas, xData, series, title, xLabel, yLabel, theme, fixed) {
+            const multi = series.length > 1;
             const legendH = multi ? 46 : 0;
             const W = 1000, H = 500 + legendH;
             const font = '"Microsoft YaHei", "PingFang SC", sans-serif';
@@ -4348,40 +4311,40 @@
                 return null;
             }
 
-            // Single-series charts keep the per-point value labels via the
-            // datalabels plugin, registered per chart (not globally).
             const plugins = [];
-            if (!multi && typeof ChartDataLabels !== 'undefined') plugins.push(ChartDataLabels);
-            const datasets = lines.map(l => ({
-                label: l.label || yLabel,
-                data: [null].concat(l.data),
-                borderColor: l.color,
-                backgroundColor: l.color,
-                pointBackgroundColor: theme.bg,
-                pointBorderColor: l.color,
-                pointRadius: 3.5,
-                pointHoverRadius: 5,
-                borderWidth: 3,
-                tension: 0.25
-            }));
+            if (typeof ChartDataLabels !== 'undefined') plugins.push(ChartDataLabels);
+            const datasets = series.map(function (sr) {
+                return {
+                    label: sr.label || yLabel,
+                    data: sr.data,
+                    backgroundColor: sr.color,
+                    borderColor: sr.color,
+                    borderWidth: 0,
+                    borderRadius: 4,
+                    maxBarThickness: series.length > 3 ? 22 : (series.length > 2 ? 30 : 64)
+                };
+            });
             const chart = new Chart(ctx, {
-                type: 'line',
-                data: { labels: [0].concat(xData), datasets: datasets },
+                type: 'bar',
+                data: { labels: xData, datasets: datasets },
                 options: {
                     responsive: !fixed,
                     maintainAspectRatio: false,
                     devicePixelRatio: dpr,
                     animation: false,
-                    interaction: { mode: 'nearest', axis: 'x', intersect: false },
-                    layout: { padding: { top: 8, left: 16, right: 16 } },
+                    interaction: { mode: 'index', intersect: false },
+                    layout: { padding: { top: 14, left: 16, right: 16 } },
                     scales: {
                         x: {
                             title: { display: true, text: xLabel, color: theme.dim, font: { size: 14, weight: 'bold', family: font } },
-                            ticks: { color: theme.dim },
-                            grid: { color: theme.grid }
+                            ticks: { color: theme.dim, font: { size: 13, family: font } },
+                            grid: { display: false }
                         },
                         y: {
                             beginAtZero: true,
+                            // Headroom so the value label above the tallest bar
+                            // is not clipped by the plot area.
+                            grace: '12%',
                             title: { display: true, text: yLabel, color: theme.dim, font: { size: 14, weight: 'bold', family: font } },
                             ticks: { color: theme.dim },
                             grid: { color: theme.grid }
@@ -4389,13 +4352,20 @@
                     },
                     plugins: {
                         legend: { display: multi, position: 'bottom', labels: { color: theme.text, boxWidth: 20, boxHeight: 8, font: { size: 14, family: font } } },
-                        tooltip: { callbacks: { label: c => c.dataset.label + ' ' + (c.parsed.y != null ? Number(c.parsed.y).toFixed(2) : '-') } },
-                        datalabels: multi ? { display: false } : {
+                        tooltip: { callbacks: { label: function (c) { return c.dataset.label + ' ' + (c.parsed.y != null ? Number(c.parsed.y).toFixed(2) : '-'); } } },
+                        datalabels: {
                             color: theme.text,
-                            font: { size: 14, family: font },
-                            formatter: v => v == null ? '' : Number(v).toFixed(2),
+                            font: { size: series.length > 3 ? 10 : 12, family: font },
+                            anchor: 'end',
                             align: 'top',
-                            offset: 8
+                            offset: 2,
+                            // 'auto' drops labels that would collide once a
+                            // group holds four or five bars.
+                            display: series.length > 3 ? 'auto' : true,
+                            formatter: function (v) {
+                                if (v == null) return '';
+                                return Number(v) >= 100 ? Math.round(v) : Number(v).toFixed(1);
+                            }
                         }
                     }
                 },
@@ -4406,7 +4376,6 @@
             chart.draw();
             return chart;
         }
-
         // ---- Export ----
         function perfReportLines() {
             const lines = [];
@@ -4419,6 +4388,9 @@
             lines.push('请求入口：' + perfRequestUrl());
             lines.push('模型：' + perfVal('model'));
             lines.push('并发数：' + (perfVal('conc') || '1'));
+            lines.push('每类轮数：' + (perfVal('rounds') || '1'));
+            lines.push('执行位置：代理进程内（不经浏览器）');
+            if (perfRun && perfRun.url) lines.push('上游地址：' + perfRun.url);
             if (perfStartTime) lines.push('测试时间：' + perfStartTime.toLocaleString());
             return lines;
         }
@@ -4459,24 +4431,30 @@
 
         function perfExportRows(annotate) {
             return perfResults.map(function (r) {
-                const conc = r.concurrency || 1;
-                const input = (annotate && r.realInputLength && r.realInputLength !== r.inputLength)
-                    ? r.inputLength + ' (' + r.realInputLength + ')' : r.inputLength;
-                if (r.error) return [input, '错误', '错误', '错误', '错误', '错误', '错误', '错误', conc];
+                const name = r.label || r.key;
+                if (r.error) return [name].concat(new Array(10).fill('错误'), [r.errors || 0]);
+                const ttft = annotate
+                    ? perfFix(r.ttft_ms, 0) + '(' + perfFix(r.ttft_min_ms, 0) + '~' + perfFix(r.ttft_max_ms, 0) + ')'
+                    : perfFix(r.ttft_ms, 0);
                 return [
-                    input, perfFix(r.prefillTime), perfFix(r.prefillSpeed),
-                    conc > 1 ? perfFix(r.totalPrefillSpeed) : '-',
-                    r.outputLength, perfFix(r.outputTime), perfFix(r.outputSpeed),
-                    conc > 1 ? perfFix(r.totalOutputSpeed) : '-', conc
+                    name, r.prompt_tokens, ttft, perfFix(r.ttft_p50_ms, 0),
+                    perfFix(r.prefill_speed), perfFix(r.batch_prefill_speed),
+                    r.output_tokens, perfFix(r.decode_ms, 0), perfFix(r.total_ms, 0),
+                    perfFix(r.output_speed), perfFix(r.batch_output_speed),
+                    r.success + (r.errors ? '/' + r.errors + '失败' : '')
                 ];
             });
         }
 
-        const PERF_COLS = ['输入长度', '预填充耗时（ms）', '每请求预填充速度（token/s）', '预填充批次吞吐量（token/s）',
-            '输出长度', '输出耗时（ms）', '每请求输出速度（token/s）', '整轮输出吞吐量（token/s）', '并发数'];
+        const PERF_COLS = ['类别', '提示 tokens', 'TTFT（ms）', 'TTFT P50（ms）',
+            '每请求预填充（token/s）', '预填充整轮吞吐（token/s）',
+            '输出 tokens', '解码耗时（ms）', '总时间（ms）',
+            '每请求解码（token/s）', '解码整轮吞吐（token/s）', '样本数'];
         // Same columns, wrapped onto two lines so they fit the exported image.
-        const PERF_PNG_COLS = ['输入长度', '预填充耗时\n(ms)', '预填充速度\n(token/s)', '批次吞吐\n(token/s)',
-            '输出长度', '输出耗时\n(ms)', '输出速度\n(token/s)', '整轮吞吐\n(token/s)', '并发数'];
+        const PERF_PNG_COLS = ['类别', '提示\ntokens', 'TTFT\n(ms)', 'TTFT P50\n(ms)',
+            '预填充\n(tok/s)', '预填充整轮\n(tok/s)',
+            '输出\ntokens', '解码耗时\n(ms)', '总时间\n(ms)',
+            '解码\n(tok/s)', '解码整轮\n(tok/s)', '样本数'];
         const PERF_TBL_PAD = 20, PERF_TBL_TITLE_H = 40, PERF_TBL_HEAD_H = 46, PERF_TBL_ROW_H = 30, PERF_TBL_FOOT_H = 34;
 
         function perfTableHeight(rowCount) {
@@ -4509,7 +4487,7 @@
             });
 
             let y = tblTop + PERF_TBL_HEAD_H;
-            ctx.font = '13.5px ' + font;
+            ctx.font = (PERF_PNG_COLS.length >= 12 ? '12px ' : '13.5px ') + font;
             rows.forEach(function (row, ri) {
                 if (ri % 2) {
                     ctx.fillStyle = '#f8fafc';
@@ -4538,7 +4516,7 @@
             ctx.textAlign = 'left';
             ctx.font = '12px ' + font;
             ctx.fillStyle = '#6b7280';
-            ctx.fillText('注：输入长度括号内为实际 prompt_tokens；整轮输出吞吐 = 全组总输出 token ÷ 最早首字到全部完成的墙钟时间。', x0, y + 12);
+            ctx.fillText('注：测试在代理进程内执行。TTFT 括号内为最小~最大值；预填充 = 提示 tokens ÷ TTFT（含排队与网络）；解码 = 输出 tokens ÷ 首字到结束；整轮列为单轮汇总后多轮平均。', x0, y + 12);
         }
 
         function perfExportPng() {
@@ -4562,7 +4540,7 @@
             ctx.fillStyle = '#111827';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            ctx.fillText('大语言模型推理性能测试结果', W / 2, 26);
+            ctx.fillText('大语言模型分类推理性能测试结果', W / 2, 26);
             ctx.font = '15px "Microsoft YaHei", "PingFang SC", sans-serif';
             ctx.textAlign = 'left';
             let y = titleH + pad;
@@ -4583,7 +4561,7 @@
 
         function perfExportCsv() {
             if (!perfHasData()) return;
-            let csv = '大语言模型推理性能测试结果\n\n' + perfReportLines().join('\n') + '\n\n';
+            let csv = '大语言模型分类推理性能测试结果\n\n' + perfReportLines().join('\n') + '\n\n';
             csv += PERF_COLS.join(',') + '\n';
             perfExportRows().forEach(function (row) { csv += row.join(',') + '\n'; });
             perfDownloadText(csv, perfExportBase() + '.csv', 'text/csv', true);
@@ -4591,7 +4569,7 @@
 
         function perfExportMd() {
             if (!perfHasData()) return;
-            let md = '# 大语言模型推理性能测试结果\n\n';
+            let md = '# 大语言模型分类推理性能测试结果\n\n';
             perfReportLines().forEach(function (line) { md += '- ' + line + '\n'; });
             md += '\n| ' + PERF_COLS.join(' | ') + ' |\n|' + PERF_COLS.map(function () { return '---:'; }).join('|') + '|\n';
             perfExportRows().forEach(function (row) { md += '| ' + row.join(' | ') + ' |\n'; });
