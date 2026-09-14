@@ -13,6 +13,8 @@ import shutil
 import subprocess
 import traceback
 import uuid
+import hashlib
+import base64
 import requests
 from flask import Flask, request, jsonify, send_from_directory, Response
 from flask_socketio import SocketIO, emit, join_room, leave_room
@@ -25,7 +27,7 @@ from datetime import datetime
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=getattr(logging, os.environ.get('LOG_LEVEL', 'WARNING').upper(), logging.WARNING))
 logger = logging.getLogger(__name__)
 
 def _fix_sse_double_data(chunk_str):
@@ -167,6 +169,16 @@ model_redirects = {}  # Store model redirection mapping
 model_vision_redirects = {}  # Store mapping of text-only model -> vision-capable model (entry kept even when disabled)
 model_vision_disabled = set()  # Vision redirects that are configured but toggled OFF in the admin UI
 model_access_rules = []  # Per-key / per-IP model visibility rules (allowlists)
+
+# ---- Vision caption cache ----
+# A text-only main model cannot ingest images. When a vision redirect is in
+# play, each image is described once by the vision terminal (captioner); we
+# key that description by the image's sha256 so later turns containing the
+# same image can be answered by the MAIN model with the cached caption
+# substituted in place of the image (one image <-> one caption). In-memory
+# only, reset on restart.
+vision_caption_cache = {}
+vision_caption_cache_lock = Lock()
 
 # Initialize Flask app with SocketIO.
 # static_folder is disabled: monitor.html is served via an explicit route and
@@ -892,6 +904,12 @@ class APIProxyServer:
             response_size_container = {'size': 0}
             error_body_container = {'data': b''}
 
+            # Vision caption capture: when a text-only model's image request was
+            # redirected to the captioner, accumulate its reply so it can be
+            # cached against the image hash(es) for later substitution.
+            caption_hashes = getattr(req, '_vision_cap_hashes', None)
+            caption_buf = {'text': ''} if caption_hashes else None
+
             def generate():
                 try:
                     is_gzipped = response.headers.get('Content-Encoding', '') == 'gzip'
@@ -917,6 +935,28 @@ class APIProxyServer:
                             chunk_bytes = chunk if isinstance(chunk, bytes) else chunk.encode('utf-8')
                             chunk_str = chunk_bytes.decode('utf-8', errors='replace')
 
+                            # Vision caption accumulation (streaming + non-stream).
+                            if caption_buf is not None:
+                                try:
+                                    if chunk_str.startswith('data: '):
+                                        _js = chunk_str[6:].strip()
+                                        if _js and _js != '[DONE]':
+                                            _obj = json.loads(_js)
+                                            _chs = _obj.get('choices') or []
+                                            if _chs:
+                                                _c = (_chs[0].get('delta') or {}).get('content')
+                                                if _c:
+                                                    caption_buf['text'] += _c
+                                    else:
+                                        _obj = json.loads(chunk_str)
+                                        _chs = _obj.get('choices') or []
+                                        if _chs:
+                                            _c = (_chs[0].get('message') or {}).get('content')
+                                            if _c:
+                                                caption_buf['text'] = _c
+                                except Exception:
+                                    pass
+
                             # Capture the head of upstream error bodies for the
                             # monitor error log (pass-through stays unchanged).
                             if response.status_code >= 400 and len(error_body_container['data']) < 65536:
@@ -936,12 +976,16 @@ class APIProxyServer:
                                                     usage = data_obj['usage']
                                                     # Update token statistics
                                                     if provider not in token_stats:
-                                                        token_stats[provider] = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+                                                        token_stats[provider] = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'cached_tokens': 0}
 
                                                     # Update stats
                                                     token_stats[provider]['prompt_tokens'] += usage.get('prompt_tokens', 0)
                                                     token_stats[provider]['completion_tokens'] += usage.get('completion_tokens', 0)
                                                     token_stats[provider]['total_tokens'] += usage.get('total_tokens', 0)
+                                                    # OpenAI-style cache hit tokens; Anthropic
+                                                    # usage is converted to this shape upstream.
+                                                    details = usage.get('prompt_tokens_details') or {}
+                                                    token_stats[provider]['cached_tokens'] = token_stats[provider].get('cached_tokens', 0) + (details.get('cached_tokens') or usage.get('cache_read_input_tokens', 0))
 
                                                     # Emit token stats update
                                                     try:
@@ -1022,6 +1066,13 @@ class APIProxyServer:
                     logger.info(f"Upstream stream ended during transfer: {e}")
                 finally:
                     flush_stream_progress()
+                    if caption_buf is not None:
+                        _cap = caption_buf['text'].strip()
+                        if _cap:
+                            with vision_caption_cache_lock:
+                                for _h in caption_hashes:
+                                    vision_caption_cache[_h] = _cap
+                            logger.info(f"Vision caption cached for {len(caption_hashes)} image hash(es), {len(_cap)} chars")
                     on_response_close()
 
             # Return streaming response
@@ -1230,7 +1281,7 @@ def fetch_all_models(refresh=True):
 
                 # Retry logic for model fetching
                 max_retries = 3
-                timeout = 1  # 1 second timeout
+                timeout = 3  # busy engines often miss a 1s /v1/models window
                 for attempt in range(max_retries):
                     try:
                         response = requests.get(models_url, headers=headers, timeout=timeout)
@@ -1293,7 +1344,27 @@ def fetch_all_models(refresh=True):
                                         else:
                                             routing[final_model_id].append(endpoint)
         except Exception as e:
-            logger.error(f"Error fetching models from {endpoint['proxy_path_prefix']}: {e}")
+            prefix = endpoint['proxy_path_prefix']
+            logger.error(f"Error fetching models from {prefix}: {e}")
+            # A transient /v1/models failure (1s timeout on a busy engine)
+            # must not drop this endpoint's models from the rebuilt cache:
+            # alias chains (Qwen3 -> Qwen3.8-Flash-Next-FP8 -> this endpoint)
+            # would 404 with "not found in any configured endpoint" until the
+            # next successful cycle. Carry the previous entries over instead.
+            try:
+                carried = 0
+                for mid, m in cached_models.items():
+                    if m.get('source_endpoint') != prefix and prefix not in (m.get('available_endpoints') or []):
+                        continue
+                    if mid not in all_models:
+                        all_models[mid] = m
+                        carried += 1
+                    if mid not in routing:
+                        routing[mid] = model_routing.get(mid) or [endpoint]
+                if carried:
+                    logger.warning(f"Carried over {carried} stale model(s) from {prefix} after fetch failure")
+            except Exception as carry_err:
+                logger.error(f"Failed to carry stale models for {prefix}: {carry_err}")
 
     cached_models = all_models
 
@@ -2036,6 +2107,7 @@ def aggregated_chat_completions():
             return bool(routes and routes[0].get('proxy_path_prefix') == '/__proxy__')
 
         vision_alias = None
+        vision_redirect_disabled_hit = False
         if _routes_through_proxy(requested_model_id):
             candidate = None
             if requested_model_id in model_vision_redirects:
@@ -2043,18 +2115,51 @@ def aggregated_chat_completions():
                 # Toggle OFF in admin UI (disabled set) or empty value -> no rewrite.
                 if candidate and requested_model_id in model_vision_disabled:
                     candidate = None
+                    vision_redirect_disabled_hit = True
             else:
                 requested_lower = str(requested_model_id).lower()
                 for original, target in model_vision_redirects.items():
                     if str(original).lower() == requested_lower:
-                        if target and original not in model_vision_disabled:
+                        if target and original in model_vision_disabled:
+                            vision_redirect_disabled_hit = True
+                        elif target:
                             candidate = target
                         break
             if candidate:
                 vision_alias = candidate
         if vision_alias and request_contains_image(data):
-            logger.info(f"Image request -> {requested_model_id} (via /__proxy__) vision redirect to {vision_alias}")
-            requested_model_id = vision_alias
+            # Canonicalize image parts first: the captioner's OpenAI layer only
+            # accepts `image_url`, and content hashing needs a stable form.
+            _chg, _drop = normalize_image_parts(data)
+            if _chg or _drop:
+                logger.info(f"Normalized image parts for {requested_model_id}->{vision_alias}: {_chg} rewritten, {_drop} dropped")
+            hashes = collect_image_hashes(data)
+            with vision_caption_cache_lock:
+                missing = [h for h in hashes if h not in vision_caption_cache]
+            if hashes and not missing:
+                # All images already described: answer with the MAIN model and
+                # substitute cached captions in place of the images (no captioner).
+                n = substitute_cached_captions(data)
+                logger.info(f"Vision cache HIT for {requested_model_id}: substituted {n}/{len(hashes)} image(s), kept main model (no captioner)")
+                # requested_model_id stays = the client's text-only model.
+            else:
+                # New image(s): this turn is answered by the captioner. Fold the
+                # history to a captioner-safe shape first (text + image_url only;
+                # strip tool_calls/tool_result/thinking parts the strict validator
+                # rejects), then tag the request so its reply is captured and
+                # cached against each new hash.
+                sanitize_for_captioner(data)
+                if missing:
+                    request._vision_cap_hashes = missing
+                logger.info(f"Image request -> {requested_model_id} (via /__proxy__) vision redirect to {vision_alias} (captioning {len(missing)} new image(s))")
+                requested_model_id = vision_alias
+        elif vision_redirect_disabled_hit and request_contains_image(data):
+            # Vision redirect configured but disabled: the text-only backend
+            # would choke on list content ("can only concatenate list (not
+            # str) to list"), so strip the image parts before forwarding.
+            removed = strip_image_content_parts(data)
+            if removed:
+                logger.info(f"Vision redirect disabled for {requested_model_id}: stripped {removed} image part(s) before forwarding to text-only backend")
 
         selected_endpoint, backend_model_name = resolve_model_route(requested_model_id)
         if selected_endpoint is None:
@@ -2714,9 +2819,12 @@ def bench_one_request(url, headers, payload):
     }
 
 
-def bench_run_category(cat, cfg, url, headers):
-    """Run one category for cfg['rounds'] rounds of cfg['concurrency'] requests."""
-    conc = cfg['concurrency']
+def bench_run_category(cat, cfg, url, headers, conc=None):
+    """Run one category for cfg['rounds'] rounds of `conc` requests.
+
+    conc defaults to cfg['concurrency']; the sweep driver passes each level.
+    """
+    conc = conc or cfg['concurrency']
     payload = {
         'model': cfg['backend_model'],
         'messages': [
@@ -2831,6 +2939,7 @@ def bench_worker(cfg):
             'endpoint': endpoint.get('proxy_path_prefix'),
             'url': url,
             'concurrency': cfg['concurrency'],
+            'conc_levels': list(range(1, cfg['concurrency'] + 1)),
             'rounds': cfg['rounds'],
             'started_at': datetime.now().isoformat(),
         })
@@ -2843,14 +2952,31 @@ def bench_worker(cfg):
 
         started = time.perf_counter()
         rows = []
+        # Sweep: an input concurrency of N means "test every level 1..N".
+        conc_plan = list(range(1, cfg['concurrency'] + 1))
         for idx, cat in enumerate(cats):
             if bench_state['cancel']:
                 break
-            socketio.emit('bench_progress', {
-                'category': cat['key'], 'index': idx + 1, 'total': len(cats),
-                'message': f"{cat['label']}（{idx + 1}/{len(cats)}）",
-            })
-            row = bench_run_category(cat, cfg, url, headers)
+            sub_rows = []
+            for clevel in conc_plan:
+                if bench_state['cancel']:
+                    break
+                if len(conc_plan) > 1:
+                    socketio.emit('bench_progress', {
+                        'category': cat['key'], 'index': idx + 1, 'total': len(cats),
+                        'concurrency': clevel,
+                        'message': f"{cat['label']}（{idx + 1}/{len(cats)}）· 并发 {clevel}/{cfg['concurrency']}",
+                    })
+                sub = bench_run_category(cat, cfg, url, headers, conc=clevel)
+                sub['concurrency'] = clevel
+                sub_rows.append(sub)
+            if not sub_rows:
+                break
+            row = sub_rows[-1]
+            if len(sub_rows) > 1:
+                row = dict(row)
+                row['sweep'] = True
+                row['by_concurrency'] = sub_rows
             rows.append(row)
             socketio.emit('bench_row', {'row': row})
 
@@ -3620,6 +3746,277 @@ def request_contains_image(data):
                 if 'image_url' in part:
                     return True
     return False
+
+
+def strip_image_content_parts(data):
+    """Drop image parts from chat messages and flatten content to plain text.
+
+    Fallback for models whose vision redirect is configured but disabled: a
+    text-only backend receiving list content fails server-side with errors
+    like "can only concatenate list (not str) to list". Returns the number
+    of removed parts; mutates the payload in place.
+    """
+    removed = 0
+    messages = data.get('messages') if isinstance(data, dict) else None
+    if not isinstance(messages, list):
+        return 0
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get('content')
+        if not isinstance(content, list):
+            continue
+        kept = []
+        had_image = False
+        for part in content:
+            if isinstance(part, dict):
+                ptype = str(part.get('type', '')).lower()
+                if ptype in ('image', 'image_url', 'input_image') or 'image_url' in part:
+                    had_image = True
+                    removed += 1
+                    continue
+            kept.append(part)
+        if not had_image:
+            continue
+        if all(isinstance(p, str) or (isinstance(p, dict) and str(p.get('type', 'text')) == 'text') for p in kept):
+            text = '\n'.join(p if isinstance(p, str) else str(p.get('text', '')) for p in kept).strip()
+            msg['content'] = text or '[image removed]'
+        else:
+            msg['content'] = kept
+    return removed
+
+
+def _part_to_image_url(part):
+    """Extract a usable image URL/data-URL from a content part.
+
+    Returns a 'data:<media>;base64,<data>' or http(s) url string when the
+    part carries an image in OpenAI (image_url), llama.cpp (input_image) or
+    Anthropic ({image: {source: base64}}) form; returns None when it cannot
+    be turned into something the strict OpenAI protocol layer accepts.
+    """
+    iu = part.get('image_url')
+    if isinstance(iu, dict):
+        url = iu.get('url')
+        if isinstance(url, str) and (url.startswith('data:') or url.startswith('http')):
+            return url
+
+    ii = part.get('input_image')
+    if isinstance(ii, dict):
+        url = ii.get('url')
+        if isinstance(url, str) and (url.startswith('data:') or url.startswith('http')):
+            return url
+
+    im = part.get('image')
+    if isinstance(im, dict):
+        url = im.get('url')
+        if isinstance(url, str) and (url.startswith('data:') or url.startswith('http')):
+            return url
+
+    src = part.get('source')
+    if isinstance(src, dict) and str(src.get('type', '')).lower() == 'base64':
+        data = src.get('data')
+        if data:
+            media = str(src.get('media_type') or 'image/png')
+            return f"data:{media};base64,{data}"
+
+    return None
+
+
+def normalize_image_parts(data):
+    """Rewrite every image content part into OpenAI `image_url` form.
+
+    The vision-redirect captioner (e.g. qwen3-omni-captioner-nvfp4 on
+    vLLM 0.28.0) strictly validates message content parts and rejects
+    Anthropic-style `{type:image, source:...}`, `type:image` shapes and bare
+    string elements (pydantic "can only concatenate list (not str) to list"
+    / validation errors). Normalize image parts to `{type:image_url,
+    image_url:{url}}` and wrap raw strings in text parts before forwarding.
+    Returns (changed, dropped). Mutates the payload in place.
+    """
+    changed = 0
+    dropped = 0
+    messages = data.get('messages') if isinstance(data, dict) else None
+    if not isinstance(messages, list):
+        return changed, dropped
+    image_keys = ('image', 'image_url', 'input_image')
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get('content')
+        if not isinstance(content, list):
+            continue
+        out = []
+        for part in content:
+            if isinstance(part, dict):
+                ptype = str(part.get('type', '')).lower()
+                is_image = (ptype in image_keys or 'image_url' in part or 'image' in part
+                            or (isinstance(part.get('source'), dict) and str(part.get('source', {}).get('type', '')).lower() == 'base64'))
+                if is_image:
+                    url = _part_to_image_url(part)
+                    if url:
+                        out.append({'type': 'image_url', 'image_url': {'url': url}})
+                        changed += 1
+                    else:
+                        dropped += 1  # unrecognized image shape -> drop
+                    continue
+                # keep recognized typed parts (text, input_audio, ...) as-is
+                if ptype:
+                    out.append(part)
+                    continue
+                # a dict part with no recognizable type: if it carries any
+                # 'text' we can salvage it as a text part; otherwise drop it
+                if isinstance(part.get('text'), str):
+                    out.append({'type': 'text', 'text': part['text']})
+                    changed += 1
+                else:
+                    dropped += 1
+                continue
+            if isinstance(part, str):
+                # bare string element -> text part (strict validator rejects raw strings)
+                out.append({'type': 'text', 'text': part})
+                changed += 1
+                continue
+            dropped += 1  # unknown element type (number etc.) -> drop
+        if changed or dropped:
+            msg['content'] = out
+    return changed, dropped
+
+
+def image_sha256(part):
+    """Content-address a normalized image part; None for non-images.
+
+    A `data:` URL is hashed on its decoded bytes (same image -> same key
+    regardless of declared media type); an http(s) image URL is hashed on the
+    URL string (we do not fetch here).
+    """
+    if not isinstance(part, dict):
+        return None
+    iu = part.get('image_url')
+    url = iu.get('url') if isinstance(iu, dict) else None
+    if not isinstance(url, str) or not url:
+        return None
+    if url.startswith('data:'):
+        try:
+            _, _, b64 = url.partition(',')
+            raw = base64.b64decode(b64)
+        except Exception:
+            return None
+    else:
+        raw = url.encode('utf-8')
+    return hashlib.sha256(raw).hexdigest()
+
+
+def collect_image_hashes(data):
+    """Return image hashes in document order across all messages."""
+    out = []
+    messages = data.get('messages') if isinstance(data, dict) else None
+    if not isinstance(messages, list):
+        return out
+    for msg in messages:
+        content = msg.get('content') if isinstance(msg, dict) else None
+        if isinstance(content, list):
+            for part in content:
+                h = image_sha256(part)
+                if h:
+                    out.append(h)
+    return out
+
+
+def substitute_cached_captions(data):
+    """Replace each cached image part with its stored caption as text.
+
+    Lets a text-only main model answer turns that reference an image it cannot
+    see. Only cached images are replaced; uncached ones are left untouched.
+    Returns the number of images substituted. Mutates the payload in place.
+    """
+    messages = data.get('messages') if isinstance(data, dict) else None
+    if not isinstance(messages, list):
+        return 0
+    n = 0
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        content = msg.get('content')
+        if not isinstance(content, list):
+            continue
+        out = []
+        for part in content:
+            h = image_sha256(part) if isinstance(part, dict) else None
+            if h and h in vision_caption_cache:
+                out.append({'type': 'text', 'text': f"[图片 {h[:8]}] {vision_caption_cache[h]}"})
+                n += 1
+            else:
+                out.append(part)
+        msg['content'] = out
+    return n
+
+
+def _part_to_plain_text(part):
+    """Best-effort text for a non-image content part (tool_use/result/thinking/etc.)."""
+    if isinstance(part, str):
+        return part
+    if isinstance(part, dict):
+        for k in ('text', 'thinking', 'reasoning', 'content', 'refusal'):
+            v = part.get(k)
+            if isinstance(v, str) and v:
+                return v
+        inp = part.get('input')
+        if isinstance(inp, (dict, list)):
+            try:
+                return json.dumps(inp, ensure_ascii=False)
+            except Exception:
+                return ''
+    return ''
+
+
+def _content_for_captioner(content):
+    """Coerce message content to a captioner-safe form.
+
+    The vision captioner (strict OpenAI validator) accepts only string content
+    or a list of `text` / `image_url` parts. opencode history carries
+    tool_use / tool_result / thinking parts and null/empty text fields that the
+    captioner rejects (400 "can only concatenate list (not str) to list" /
+    validation errors). Collapse everything else to text or drop it; normalize
+    images to image_url.
+    """
+    if isinstance(content, str):
+        return content
+    if content is None:
+        return ''
+    if not isinstance(content, list):
+        return str(content)
+    out = []
+    for part in content:
+        if isinstance(part, dict):
+            ptype = str(part.get('type', '')).lower()
+            is_image = (ptype in ('image', 'image_url', 'input_image') or 'image_url' in part
+                        or 'image' in part or (isinstance(part.get('source'), dict)
+                                               and str(part.get('source', {}).get('type', '')).lower() == 'base64'))
+            if is_image:
+                u = _part_to_image_url(part)
+                if u:
+                    out.append({'type': 'image_url', 'image_url': {'url': u}})
+                continue
+        text = _part_to_plain_text(part)
+        if text:
+            out.append({'type': 'text', 'text': text})
+    return out
+
+
+def sanitize_for_captioner(data):
+    """Reduce a request to a shape the strict captioner accepts.
+
+    Keeps the conversation but strips tool_calls and folds all content to
+    text + image_url only. Mutates the payload in place.
+    """
+    messages = data.get('messages') if isinstance(data, dict) else None
+    if not isinstance(messages, list):
+        return
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        msg.pop('tool_calls', None)
+        msg['content'] = _content_for_captioner(msg.get('content'))
 
 
 def set_vision_redirect(original_model, target_model):

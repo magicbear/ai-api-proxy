@@ -930,6 +930,14 @@
         .perf-summary { font-size: 12px; color: var(--text-dim); line-height: 1.9; }
         .perf-summary b { color: var(--text); font-weight: 600; }
         .perf-charts { display: flex; flex-direction: column; gap: 12px; }
+        .perf-conc-status { display: flex; flex-wrap: wrap; gap: 8px; }
+        .perf-conc-status:empty { display: none; }
+        .perf-conc-chip { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+        .perf-conc-chip b { color: var(--text); }
+        .perf-conc-chip.ok { border-color: rgba(52,211,153,.45); }
+        .perf-conc-chip.err { border-color: rgba(248,113,113,.55); }
+        .perf-conc-chip.err b { color: var(--red); }
+        .perf-conc-chip .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
         .perf-chart-box { position: relative; height: 520px; min-width: 0; }
         .perf-chart { width: 100% !important; height: 100% !important; display: block; border: 1px solid var(--border); border-radius: 10px; background: #0d121d; }
         .perf-run { color: var(--amber); animation: ccu-pulse 1.2s ease-in-out infinite; }
@@ -1193,7 +1201,7 @@
                         <div class="perf-group">
                             <div class="perf-group-title">测试参数</div>
                             <div class="perf-field">
-                                <label for="perf-conc">并发数</label>
+                                <label for="perf-conc">并发数（自动 1..N 扫描）</label>
                                 <input type="number" id="perf-conc" class="perf-input" value="1" min="1" max="100">
                             </div>
                             <div class="perf-field">
@@ -1204,7 +1212,7 @@
                                 <label for="perf-out">输出上限</label>
                                 <input type="number" id="perf-out" class="perf-input" placeholder="留空=用类别默认值" min="16" max="8192">
                             </div>
-                            <div class="perf-hint">每个类别跑「轮数 × 并发」次请求；每请求指标取全部样本均值，整轮吞吐按每轮独立计算后再平均。</div>
+                            <div class="perf-hint">并发数填 N 时自动从 1 扫描到 N（并发 1/2/…/N 依次测试）；每个类别跑「轮数 × (1+2+…+N)」次请求，每请求指标取全部样本均值，整轮吞吐按每轮独立计算后再平均。</div>
                         </div>
 
                         <div class="perf-group">
@@ -1276,6 +1284,7 @@
                     <div class="panel">
                         <div class="panel-header"><span>分类对比</span><span class="hint">深色为页面显示，导出 PNG 使用浅色主题</span></div>
                         <div class="panel-body perf-charts" style="max-height:none;">
+                            <div class="perf-conc-status" id="perf-conc-status"></div>
                             <div class="perf-chart-box"><canvas id="perf-chart-ttft" class="perf-chart"></canvas></div>
                             <div class="perf-chart-box"><canvas id="perf-chart-tps" class="perf-chart"></canvas></div>
                         </div>
@@ -1518,9 +1527,38 @@
             document.getElementById('stream-count-hint').textContent = (data.active_streams || 0) + ' 活跃';
         }
 
+        // Reset all client-side live state before a full re-sync. Without this,
+        // connections/streams that finished while the WebSocket was down never
+        // delivered connection_removed/stream_finished, so their topology-map
+        // nodes/links lingered frozen at the moment of disconnect.
+        function clearListTimers(id) {
+            const list = document.getElementById(id);
+            if (!list) return;
+            Array.prototype.forEach.call(list.children, function (item) {
+                if (item.durTimer) clearInterval(item.durTimer);
+            });
+            list.innerHTML = '';
+        }
+        function resetLiveState() {
+            clearListTimers('connections-list');
+            clearListTimers('streams-list');
+            clearStreamData();
+            // Drop every topology node/link/edge and rebuild from the fresh
+            // server snapshot; keep the user's filter selection and liveness
+            // probes (those are view state, not per-request live state).
+            fmap.clients.clear();
+            fmap.servers.clear();
+            fmap.links.clear();
+            fmap.reqs.clear();
+            fmap.parts.length = 0;
+            fmap.chunkAt.clear();
+            fmap.tokBuf.length = 0;
+            fmap.pos = {};
+            fmap.dirty = true;
+        }
+
         function updateInitialData(data) {
-            document.getElementById('connections-list').innerHTML = '';
-            document.getElementById('streams-list').innerHTML = '';
+            resetLiveState();
             (data.connections || []).forEach(function (c) { addConnection(c); });
             (data.streams || []).forEach(function (s) { addStream(s); });
         }
@@ -2355,22 +2393,28 @@
                 div.innerHTML = '<p class="empty">暂无 Token 使用数据</p>';
                 return;
             }
-            let totalP = 0, totalC = 0, totalT = 0;
+            let totalP = 0, totalC = 0, totalT = 0, totalCache = 0;
             Object.values(stats).forEach(function (u) {
                 totalP += (u && u.prompt_tokens) || 0;
                 totalC += (u && u.completion_tokens) || 0;
                 totalT += (u && u.total_tokens) || 0;
+                totalCache += (u && u.cached_tokens) || 0;
             });
-            let html = '<table class="tbl"><thead><tr><th>Provider</th><th>Prompt</th><th>Completion</th><th>Total</th></tr></thead><tbody>';
+            let html = '<table class="tbl"><thead><tr><th>Provider</th><th>Prompt</th><th>Cache</th><th>Completion</th><th>Total</th></tr></thead><tbody>';
             for (const [provider, usage] of Object.entries(stats)) {
+                const cached = (usage && usage.cached_tokens) || 0;
+                const prompt = (usage && usage.prompt_tokens) || 0;
+                const cacheText = prompt > 0 ? `${cached} (${(cached / prompt * 100).toFixed(0)}%)` : `${cached}`;
                 html += `<tr>
                     <td><span class="badge">${provider || 'unknown'}</span></td>
-                    <td class="num">${(usage && usage.prompt_tokens) || 0}</td>
+                    <td class="num">${prompt}</td>
+                    <td class="num">${cacheText}</td>
                     <td class="num">${(usage && usage.completion_tokens) || 0}</td>
                     <td class="num">${(usage && usage.total_tokens) || 0}</td>
                 </tr>`;
             }
-            html += `<tr><td><b>合计</b></td><td class="num">${totalP}</td><td class="num">${totalC}</td><td class="num">${totalT}</td></tr>`;
+            const totalCacheText = totalP > 0 ? `${totalCache} (${(totalCache / totalP * 100).toFixed(0)}%)` : `${totalCache}`;
+            html += `<tr><td><b>合计</b></td><td class="num">${totalP}</td><td class="num">${totalCacheText}</td><td class="num">${totalC}</td><td class="num">${totalT}</td></tr>`;
             html += '</tbody></table>';
             div.innerHTML = html;
         }
@@ -3963,7 +4007,9 @@
             const hw = ['processor', 'mainboard', 'memory', 'gpu', 'system']
                 .map(function (id) { return perfVal(id); }).filter(Boolean).join(' · ');
             const parts = [];
-            parts.push('<div>入口：<b>' + escText(perfRequestUrl()) + '</b>　模型：<b>' + escText(perfVal('model') || '—') + '</b>　并发：<b>' + escText(perfVal('conc') || '1') + '</b>　每类轮数：<b>' + escText(perfVal('rounds') || '1') + '</b></div>');
+            const multiConc = (perfRun && perfRun.conc_levels && perfRun.conc_levels.length > 1) || perfSwept();
+            const concText = multiConc ? '1..' + (perfVal('conc') || '1') + '（扫描）' : (perfVal('conc') || '1');
+            parts.push('<div>入口：<b>' + escText(perfRequestUrl()) + '</b>　模型：<b>' + escText(perfVal('model') || '—') + '</b>　并发：<b>' + escText(concText) + '</b>　每类轮数：<b>' + escText(perfVal('rounds') || '1') + '</b></div>');
             parts.push('<div>执行位置：<b>代理进程内</b>（不经浏览器）' +
                 (perfRun && perfRun.url ? '　上游：<b>' + escText(perfRun.url) + '</b>' : '') +
                 (perfRun && perfRun.backend_model && perfRun.backend_model !== perfVal('model') ? '　后端模型：<b>' + escText(perfRun.backend_model) + '</b>' : '') +
@@ -3972,6 +4018,7 @@
             if (hw) parts.push('<div>硬件：' + escText(hw) + '</div>');
             if (perfStartTime) parts.push('<div>测试开始：' + escText(perfStartTime.toLocaleString()) + '</div>');
             el.innerHTML = parts.join('');
+            perfRenderConcStatus();
         }
 
         // Ray already reports the cluster hardware — reuse it instead of typing it.
@@ -4138,7 +4185,8 @@
                 return;
             }
             tb.innerHTML = perfResults.map(function (r, i) {
-                const name = '<b>' + escText(r.label || r.key) + '</b>';
+                let name = '<b>' + escText(r.label || r.key) + '</b>';
+                if (r.sweep) name += ' <span class="badge">并发 1..' + (r.concurrency || 1) + '</span>';
                 if (r.error) {
                     return '<tr><td>' + name + '</td>' +
                         '<td colspan="11" style="color:var(--red);">' + escText(r.error_message || '错误') + '</td>' +
@@ -4167,6 +4215,7 @@
             if (!r) return;
             const kv = [];
             kv.push(['类别', (r.label || '') + ' (' + r.key + ')']);
+            if (r.sweep) kv.push(['并发', '扫描 1..' + r.concurrency + '（下列汇总为 ' + r.concurrency + ' 并发档）']);
             kv.push(['输出上限', r.max_tokens]);
             kv.push(['成功 / 失败', r.success + ' / ' + r.errors]);
             if (!r.error) {
@@ -4196,9 +4245,18 @@
                     return '<span>' + escText(p[0]) + '：<b>' + escText(String(p[1])) + '</b></span>';
                 }).join('') + '</div>';
 
+            if ((r.by_concurrency || []).length > 1) {
+                html += '<div class="perf-pre-label">并发扫描（1..' + r.concurrency + '）</div><div class="perf-pre">' +
+                    escText(r.by_concurrency.map(function (s) {
+                        if (s.error) return '并发 ' + (s.concurrency || 1) + ' · 整档失败：' + (s.error_message || '');
+                        return '并发 ' + (s.concurrency || 1) + ' · 成功 ' + s.success + (s.errors ? ' / 失败 ' + s.errors : '') +
+                               ' · TTFT ' + perfFix(s.ttft_ms, 0) + ' ms · 解码每请求 ' + perfFix(s.output_speed) +
+                               ' · 解码整轮 ' + perfFix(s.batch_output_speed) + ' · 端到端 ' + perfFix(s.end_to_end_speed) + ' tok/s';
+                    }).join('\n')) + '</div>';
+            }
             const rounds = r.rounds || [];
             if (rounds.length > 1) {
-                html += '<div class="perf-pre-label">每轮整轮吞吐（token/s）</div><div class="perf-pre">' +
+                html += '<div class="perf-pre-label">每轮整轮吞吐（token/s）' + (r.sweep ? ' · 并发 ' + r.concurrency + ' 档' : '') + '</div><div class="perf-pre">' +
                     escText(rounds.map(function (x) {
                         return '第 ' + x.round + ' 轮 · 成功 ' + x.success + ' · 整轮 ' + perfFix(x.batch_output_speed) +
                                ' · 端到端 ' + perfFix(x.end_to_end_speed) + ' · 解码窗口 ' + perfFix(x.decode_window_ms, 0) + ' ms';
@@ -4227,10 +4285,86 @@
         // ---- Charts (canvas, adapted from the standalone tool) ----
         const PERF_THEME_DARK = { bg: '#0d121d', text: '#e6ebf5', dim: '#8b96ad', grid: 'rgba(255,255,255,.08)', axis: '#3a4560' };
         const PERF_THEME_LIGHT = { bg: '#ffffff', text: '#111827', dim: '#4b5563', grid: '#e5e7eb', axis: '#111827' };
+        const PERF_CONC_COLORS = ['#60a5fa', '#34d399', '#fbbf24', '#f87171', '#a78bfa', '#22d3ee',
+            '#f472b6', '#a3e635', '#fb923c', '#e879f9', '#38bdf8', '#4ade80'];
+
+        function perfSwept() {
+            return perfResults.some(function (r) { return r.by_concurrency && r.by_concurrency.length > 1; });
+        }
+        function perfConcLevels() {
+            const set = {};
+            perfResults.forEach(function (r) {
+                if (r.by_concurrency && r.by_concurrency.length) {
+                    r.by_concurrency.forEach(function (s) { set[s.concurrency || 1] = 1; });
+                } else {
+                    set[r.concurrency || 1] = 1;
+                }
+            });
+            return Object.keys(set).map(Number).sort(function (a, b) { return a - b; });
+        }
+        function perfSubRow(r, conc) {
+            if (r.by_concurrency && r.by_concurrency.length) {
+                for (let i = 0; i < r.by_concurrency.length; i++) {
+                    if ((r.by_concurrency[i].concurrency || 1) === conc) return r.by_concurrency[i];
+                }
+                return null;
+            }
+            return (r.concurrency || 1) === conc ? r : null;
+        }
+
+        // Status chips above the charts: one per concurrency level, so every
+        // swept level shows its own outcome instead of only 1 vs the pick.
+        function perfRenderConcStatus() {
+            const el = perfEl('conc-status');
+            if (!el) return;
+            if (!perfSwept()) { el.innerHTML = ''; return; }
+            const levels = perfConcLevels();
+            el.innerHTML = levels.map(function (lv, i) {
+                let ok = 0, err = 0, bad = 0;
+                const spd = [], tt = [];
+                perfResults.forEach(function (r) {
+                    const s = perfSubRow(r, lv);
+                    if (!s) return;
+                    if (s.error) { bad++; return; }
+                    ok += s.success || 0;
+                    err += s.errors || 0;
+                    if (s.batch_output_speed) spd.push(s.batch_output_speed);
+                    if (s.ttft_ms) tt.push(s.ttft_ms);
+                });
+                const mean = function (a) { return a.length ? a.reduce(function (p, c) { return p + c; }, 0) / a.length : 0; };
+                const cls = (err || bad) ? 'err' : 'ok';
+                let txt = '<span class="swatch" style="background:' + PERF_CONC_COLORS[i % PERF_CONC_COLORS.length] + '"></span>' +
+                    '<b>并发 ' + lv + '</b> · 成功 ' + ok;
+                if (err) txt += ' <span style="color:var(--red)">失败 ' + err + '</span>';
+                if (bad) txt += ' <span style="color:var(--red)">' + bad + ' 类全挂</span>';
+                txt += ' · 解码整轮 <b>' + perfFix(mean(spd)) + '</b> tok/s · TTFT <b>' + perfFix(mean(tt), 0) + '</b> ms';
+                return '<span class="perf-conc-chip ' + cls + '">' + txt + '</span>';
+            }).join('');
+        }
 
         function perfChartData() {
             const xs = perfResults.filter(function (r) { return !r.error; });
             const conc = (perfRun && perfRun.concurrency) || 1;
+            if (perfSwept()) {
+                const levels = perfConcLevels();
+                const pick = function (r, lv, field) {
+                    const s = perfSubRow(r, lv);
+                    return (s && !s.error) ? s[field] : null;
+                };
+                return {
+                    x: xs.map(function (r) { return r.label || r.key; }),
+                    conc: conc,
+                    swept: true,
+                    ttft: levels.map(function (lv, i) {
+                        return { data: xs.map(function (r) { return pick(r, lv, 'ttft_ms'); }),
+                            label: 'TTFT @' + lv + ' 并发', color: PERF_CONC_COLORS[i % PERF_CONC_COLORS.length] };
+                    }),
+                    tps: levels.map(function (lv, i) {
+                        return { data: xs.map(function (r) { return pick(r, lv, 'batch_output_speed'); }),
+                            label: '解码整轮 @' + lv + ' 并发', color: PERF_CONC_COLORS[i % PERF_CONC_COLORS.length] };
+                    })
+                };
+            }
             const batchLabel = conc > 1 ? conc + ' 并发整轮' : '整轮';
             return {
                 x: xs.map(function (r) { return r.label || r.key; }),
@@ -4267,7 +4401,7 @@
             const c2 = tpsCanvas || perfEl('chart-tps');
             if (!c1 || !c2) return;
             const d = perfChartData();
-            const suffix = d.conc > 1 ? '（' + d.conc + ' 并发）' : '';
+            const suffix = d.swept ? '（并发扫描 1..' + d.conc + '）' : (d.conc > 1 ? '（' + d.conc + ' 并发）' : '');
             perfDrawBars(c1, d.x, d.ttft, '耗时分解：预填充 / 解码 / 总时间' + suffix, '类别', 'ms', theme, fixed);
             perfDrawBars(c2, d.x, d.tps, '预填充 / 解码吞吐' + suffix, '类别', 'token/s', theme, fixed);
         }
@@ -4387,7 +4521,7 @@
             });
             lines.push('请求入口：' + perfRequestUrl());
             lines.push('模型：' + perfVal('model'));
-            lines.push('并发数：' + (perfVal('conc') || '1'));
+            lines.push('并发数：' + (perfSwept() ? '1..' + (perfVal('conc') || '1') + '（扫描）' : (perfVal('conc') || '1')));
             lines.push('每类轮数：' + (perfVal('rounds') || '1'));
             lines.push('执行位置：代理进程内（不经浏览器）');
             if (perfRun && perfRun.url) lines.push('上游地址：' + perfRun.url);
